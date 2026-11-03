@@ -35,7 +35,7 @@ function Shell() {
       <header className="flex items-center gap-3 border-b border-border bg-panel px-3 py-2">
         <div className="flex items-center gap-2">
           <CandlestickChart className="size-5 text-primary" aria-hidden />
-          <h1 className="text-sm font-semibold">Strategy Charts</h1>
+          <h1 className="text-sm font-semibold">Strat Chart</h1>
         </div>
         <div className="ml-auto min-w-0">
           <ConnectionStatus />
