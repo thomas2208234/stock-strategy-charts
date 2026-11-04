@@ -127,10 +127,12 @@ export function GuideButton() {
                 Average of the last few closes. Reacts quickly to price changes.
               </Item>
               <Item swatch={{ kind: 'line', color: 'border-primary' }} title="Slow moving average">
-                Average over a longer window. Fast above slow usually means an uptrend.
+                Average over a longer window. Fast above slow usually means an uptrend. Each line is an{' '}
+                <strong className="font-medium text-foreground">EMA</strong> (Exponential Moving Average, favors recent prices) or an{' '}
+                <strong className="font-medium text-foreground">SMA</strong> (Simple Moving Average, weights every price equally).
               </Item>
-              <Item swatch={{ kind: 'line', color: 'border-foreground', dashed: true }} title="VWAP">
-                The day&apos;s average price, weighted by volume. Intraday charts only.
+              <Item swatch={{ kind: 'line', color: 'border-foreground', dashed: true }} title="VWAP · Volume-Weighted Average Price">
+                The day&apos;s average price, weighted by how much traded at each price. Intraday charts only.
               </Item>
             </Group>
 
