@@ -12,6 +12,7 @@ import {
   Minus,
   MousePointer2,
   RefreshCw,
+  Search,
   Slash,
   Timer,
   Trash2,
@@ -40,6 +41,8 @@ const ERROR_COPY: Record<ApiErrorKind, { title: string; icon: typeof Ban }> = {
   invalid: { title: 'Invalid request', icon: AlertTriangle },
   upstream: { title: 'Provider error', icon: AlertTriangle },
 }
+
+const ZOOM_LEVELS = [2, 3, 4, 6] as const
 
 const INTERVAL_NAME: Record<Interval, string> = {
   '1min': '1 minute',
@@ -70,6 +73,8 @@ export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: s
 
   const [expanded, setExpanded] = useState(false)
   const [tool, setTool] = useState<DrawTool>('none')
+  const [magnify, setMagnify] = useState(false)
+  const [zoom, setZoom] = useState<(typeof ZOOM_LEVELS)[number]>(3)
   const [selected, setSelected] = useState<string | null>(null)
   const [drawingsBySymbol, setDrawingsBySymbol] = useState<Record<string, Drawing[]>>({})
   const symbolKey = `${slot.asset}:${slot.symbol}`
@@ -86,8 +91,11 @@ export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: s
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement
       if (target.closest('input, textarea, select, [contenteditable="true"]')) return
-      if (e.key === 'Escape') {
-        if (tool !== 'none') setTool('none')
+      if ((e.key === 'm' || e.key === 'M') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        setMagnify((v) => !v)
+      } else if (e.key === 'Escape') {
+        if (magnify) setMagnify(false)
+        else if (tool !== 'none') setTool('none')
         else if (selected) setSelected(null)
         else if (expanded) setExpanded(false)
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && selected) {
@@ -98,7 +106,7 @@ export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: s
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [expanded, isActive, tool, selected, symbolKey])
+  }, [expanded, isActive, tool, selected, symbolKey, magnify])
 
   useEffect(() => {
     if (!expanded) return
@@ -189,6 +197,32 @@ export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: s
         <ToolButton icon={Minus} label="Horizontal line — click a price" active={tool === 'hline'} onClick={() => setTool('hline')} />
         <span className="mx-1 h-4 w-px bg-border" aria-hidden />
         <ToolButton
+          icon={Search}
+          label={magnify ? 'Turn off magnifier (M)' : 'Magnifier — hover to zoom in on candles (M)'}
+          active={magnify}
+          onClick={() => setMagnify((v) => !v)}
+        />
+        {magnify ? (
+          <div role="radiogroup" aria-label="Magnifier zoom" className="flex items-center rounded-md bg-background p-0.5">
+            {ZOOM_LEVELS.map((z) => (
+              <button
+                key={z}
+                type="button"
+                role="radio"
+                aria-checked={zoom === z}
+                onClick={() => setZoom(z)}
+                className={clsx(
+                  'rounded px-1.5 py-0.5 font-mono text-[11px] transition-colors',
+                  zoom === z ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {z}×
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+        <ToolButton
           icon={Undo2}
           label="Undo last line"
           disabled={drawings.length === 0}
@@ -207,7 +241,9 @@ export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: s
           }}
         />
         <span className="ml-2 min-w-0 truncate text-[11px] text-muted-foreground">
-          {tool === 'trend'
+          {magnify && tool === 'none'
+            ? 'Hover a candle to magnify it'
+            : tool === 'trend'
             ? 'Drag on the chart to draw a line'
             : tool === 'hline'
               ? 'Click a price to place a line'
@@ -249,6 +285,7 @@ export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: s
             selectedDrawing={selected}
             onAddDrawing={(d) => setDrawings((prev) => [...prev, d])}
             onSelectDrawing={setSelected}
+            magnifyZoom={magnify ? zoom : 0}
           />
         ) : null}
 

@@ -8,15 +8,13 @@ function joinOr(parts: string[]) {
 }
 
 export function describeStrategy(cfg: StrategyConfig) {
-  const { ma, rsi, macd, entry, exit, risk, vwap } = cfg
+  const { ma, macd, entry, exit, risk, vwap } = cfg
   const buy: string[] = []
   if (entry.maCrossUp && ma.enabled) buy.push(`the ${ma.fast}-bar ${ma.type} crosses above the ${ma.slow}-bar ${ma.type}`)
-  if (entry.rsiOversoldExit && rsi.enabled) buy.push(`RSI climbs back above ${rsi.oversold}`)
   if (entry.macdCrossUp && macd.enabled) buy.push('MACD crosses above its signal line')
 
   const sell: string[] = []
   if (exit.maCrossDown && ma.enabled) sell.push(`the ${ma.fast}-bar ${ma.type} drops below the ${ma.slow}-bar ${ma.type}`)
-  if (exit.rsiOverbought && rsi.enabled) sell.push(`RSI rises above ${rsi.overbought}`)
   if (exit.macdCrossDown && macd.enabled) sell.push('MACD crosses below its signal line')
   if (risk.useStop) sell.push(`price falls ${risk.stopPct}% (stop loss)`)
   if (risk.useTarget) sell.push(`price gains ${risk.targetPct}% (take profit)`)

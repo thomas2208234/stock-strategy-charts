@@ -18,6 +18,7 @@ import {
   type Time,
   type UTCTimestamp,
 } from 'lightweight-charts'
+import clsx from 'clsx'
 import { useEffect, useRef, useState } from 'react'
 import type { Series } from '@/lib/indicators'
 import { formatPrice } from '@/lib/freshness'
@@ -26,13 +27,13 @@ import { CHART_COLORS as C } from '@/lib/theme'
 import type { Bar, Interval } from '@/lib/types'
 import type { ChartSettings } from './dashboard-context'
 import { DrawingLayer, type ChartApi, type Drawing, type DrawTool } from './drawing-layer'
+import { Magnifier } from './magnifier'
 
 interface Refs {
   chart: IChartApi
   candles: ISeriesApi<'Candlestick'>
   volume?: ISeriesApi<'Histogram'>
   vwap?: ISeriesApi<'Line'>
-  rsi?: ISeriesApi<'Line'>
   macdLine?: ISeriesApi<'Line'>
   macdSignal?: ISeriesApi<'Line'>
   macdHist?: ISeriesApi<'Histogram'>
@@ -76,7 +77,6 @@ function applyData(refs: Refs, bars: Bar[], out: StrategyOutput, cfg: StrategyCo
       .map((b) => ({ time: ts(b.time), value: b.volume ?? 0, color: b.close >= b.open ? `${C.up}55` : `${C.down}55` })),
   )
   refs.vwap?.setData(line(bars, out.vwap))
-  refs.rsi?.setData(line(bars, out.rsi))
   refs.macdLine?.setData(line(bars, out.macd?.line))
   refs.macdSignal?.setData(line(bars, out.macd?.signal))
   if (refs.macdHist && out.macd) {
@@ -142,7 +142,9 @@ export function PriceChart({
   selectedDrawing,
   onAddDrawing,
   onSelectDrawing,
+  magnifyZoom = 0,
 }: {
+  magnifyZoom?: number
   bars: Bar[]
   output: StrategyOutput
   interval: Interval
@@ -155,6 +157,7 @@ export function PriceChart({
   onSelectDrawing: (id: string | null) => void
 }) {
   const [api, setApi] = useState<ChartApi | null>(null)
+  const [host, setHost] = useState<HTMLDivElement | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const refs = useRef<Refs | null>(null)
   const intraday = interval !== '1day'
@@ -164,9 +167,6 @@ export function PriceChart({
 
   const structureKey = [
     strategy.vwap.enabled && intraday,
-    strategy.rsi.enabled,
-    strategy.rsi.overbought,
-    strategy.rsi.oversold,
     strategy.macd.enabled,
     settings.showVolume,
     settings.showGrid,
@@ -231,12 +231,6 @@ export function PriceChart({
     }
 
     let pane = 1
-    if (strategy.rsi.enabled) {
-      r.rsi = chart.addSeries(LineSeries, { lineWidth: 1, color: C.accent, priceLineVisible: false, title: 'RSI' }, pane)
-      r.rsi.createPriceLine({ price: strategy.rsi.overbought, color: C.muted, lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: false, title: '' })
-      r.rsi.createPriceLine({ price: strategy.rsi.oversold, color: C.muted, lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: false, title: '' })
-      pane++
-    }
     if (strategy.macd.enabled) {
       r.macdHist = chart.addSeries(HistogramSeries, { priceLineVisible: false, lastValueVisible: false }, pane)
       r.macdLine = chart.addSeries(LineSeries, { lineWidth: 1, color: C.primary, priceLineVisible: false, title: 'MACD' }, pane)
@@ -278,8 +272,13 @@ export function PriceChart({
   const legendValue = (s?: Series) => (s && s[lastIdx] !== undefined ? formatPrice(s[lastIdx] as number) : '—')
 
   return (
-    <div className="relative h-full w-full" onPointerDown={() => onSelectDrawing(null)}>
+    <div
+      ref={setHost}
+      className={clsx('relative h-full w-full', magnifyZoom > 0 && 'cursor-zoom-in')}
+      onPointerDown={() => onSelectDrawing(null)}
+    >
       <div ref={containerRef} className="absolute inset-0" />
+      {api && magnifyZoom > 0 ? <Magnifier chart={api.chart} host={host} zoom={magnifyZoom} /> : null}
       <DrawingLayer
         api={api}
         bars={bars}
