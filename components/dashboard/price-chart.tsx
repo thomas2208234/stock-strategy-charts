@@ -25,6 +25,7 @@ import type { StrategyConfig, StrategyOutput } from '@/lib/strategy'
 import { CHART_COLORS as C } from '@/lib/theme'
 import type { Bar, Interval } from '@/lib/types'
 import type { ChartSettings } from './dashboard-context'
+import { DrawingLayer, type ChartApi, type Drawing, type DrawTool } from './drawing-layer'
 
 const MA_NAMES: Record<StrategyConfig['ma']['type'], string> = {
   EMA: 'Exponential Moving Average',
@@ -145,13 +146,24 @@ export function PriceChart({
   interval,
   strategy,
   settings,
+  drawings,
+  tool,
+  selectedDrawing,
+  onAddDrawing,
+  onSelectDrawing,
 }: {
   bars: Bar[]
   output: StrategyOutput
   interval: Interval
   strategy: StrategyConfig
   settings: ChartSettings
+  drawings: Drawing[]
+  tool: DrawTool
+  selectedDrawing: string | null
+  onAddDrawing: (d: Drawing) => void
+  onSelectDrawing: (id: string | null) => void
 }) {
+  const [api, setApi] = useState<ChartApi | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const refs = useRef<Refs | null>(null)
   const intraday = interval !== '1day'
@@ -260,8 +272,10 @@ export function PriceChart({
     refs.current = r
     applyData(r, latest.current.bars, latest.current.output, latest.current.strategy)
     chart.timeScale().scrollToRealTime()
+    setApi({ chart, candles })
 
     return () => {
+      setApi(null)
       refs.current = null
       chart.remove()
     }
@@ -278,8 +292,17 @@ export function PriceChart({
   const legendValue = (s?: Series) => (s && s[lastIdx] !== undefined ? formatPrice(s[lastIdx] as number) : '—')
 
   return (
-    <div className="relative h-full w-full">
+    <div className="relative h-full w-full" onPointerDown={() => onSelectDrawing(null)}>
       <div ref={containerRef} className="absolute inset-0" />
+      <DrawingLayer
+        api={api}
+        bars={bars}
+        drawings={drawings}
+        tool={tool}
+        selectedId={selectedDrawing}
+        onAdd={onAddDrawing}
+        onSelect={onSelectDrawing}
+      />
       {shown ? (
         <div className="pointer-events-none absolute left-2 top-1.5 z-10 flex flex-col gap-0.5 font-mono text-[11px] leading-snug">
           <div className="flex flex-wrap gap-x-2 text-muted-foreground">

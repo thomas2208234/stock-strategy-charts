@@ -1,8 +1,25 @@
 'use client'
 
 import clsx from 'clsx'
-import { AlertTriangle, Ban, KeyRound, Loader2, Lock, RefreshCw, Timer } from 'lucide-react'
-import { useMemo } from 'react'
+import {
+  AlertTriangle,
+  Ban,
+  KeyRound,
+  Loader2,
+  Lock,
+  Maximize2,
+  Minimize2,
+  Minus,
+  MousePointer2,
+  RefreshCw,
+  Slash,
+  Timer,
+  Trash2,
+  Undo2,
+  X,
+  type LucideIcon,
+} from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { ASSET_LABEL, FUTURES_ETF_PROXY, findCatalog } from '@/lib/catalog'
 import { formatAge, formatPrice, freshness } from '@/lib/freshness'
 import { runStrategy } from '@/lib/strategy'
@@ -10,6 +27,7 @@ import { describeStatus, type SignalStatus } from '@/lib/strategy-text'
 import { INTERVALS, type ApiErrorKind, type Interval } from '@/lib/types'
 import { useMarketData } from '@/lib/use-market-data'
 import { useDashboard, type ChartSlot } from './dashboard-context'
+import type { Drawing, DrawTool } from './drawing-layer'
 import { PriceChart } from './price-chart'
 import { SymbolPicker } from './symbol-picker'
 import { useNow } from './use-now'
@@ -50,14 +68,61 @@ export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: s
   const fresh = last ? freshness(last.time, slot.interval, now) : undefined
   const proxy = slot.asset === 'future' ? FUTURES_ETF_PROXY[slot.symbol] : undefined
 
+  const [expanded, setExpanded] = useState(false)
+  const [tool, setTool] = useState<DrawTool>('none')
+  const [selected, setSelected] = useState<string | null>(null)
+  const [drawingsBySymbol, setDrawingsBySymbol] = useState<Record<string, Drawing[]>>({})
+  const symbolKey = `${slot.asset}:${slot.symbol}`
+  const drawings = drawingsBySymbol[symbolKey] ?? []
+  const setDrawings = (fn: (prev: Drawing[]) => Drawing[]) =>
+    setDrawingsBySymbol((all) => ({ ...all, [symbolKey]: fn(all[symbolKey] ?? []) }))
+  const removeDrawing = (id: string) => {
+    setDrawings((prev) => prev.filter((d) => d.id !== id))
+    setSelected(null)
+  }
+
+  useEffect(() => {
+    if (!expanded && !isActive) return
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement
+      if (target.closest('input, textarea, select, [contenteditable="true"]')) return
+      if (e.key === 'Escape') {
+        if (tool !== 'none') setTool('none')
+        else if (selected) setSelected(null)
+        else if (expanded) setExpanded(false)
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && selected) {
+        e.preventDefault()
+        setDrawingsBySymbol((all) => ({ ...all, [symbolKey]: (all[symbolKey] ?? []).filter((d) => d.id !== selected) }))
+        setSelected(null)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [expanded, isActive, tool, selected, symbolKey])
+
+  useEffect(() => {
+    if (!expanded) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [expanded])
+
   return (
+    <>
+    {expanded ? (
+      <div aria-hidden className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm" onClick={() => setExpanded(false)} />
+    ) : null}
     <section
       aria-label={`${slot.symbol} chart`}
+      aria-modal={expanded || undefined}
+      role={expanded ? 'dialog' : undefined}
       onPointerDown={() => setActiveChart(slot.id)}
       className={clsx(
         'flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border bg-background transition-[border-color,box-shadow]',
         isActive ? 'border-primary/70 shadow-[0_0_0_1px_var(--primary)]' : 'border-border hover:border-muted-foreground/40',
-        className,
+        expanded ? 'fixed inset-2 z-50 sm:inset-4' : className,
       )}
     >
       <header className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border bg-panel px-3 py-2">
@@ -107,13 +172,84 @@ export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: s
             </button>
           ))}
         </div>
+        <ToolButton
+          icon={expanded ? Minimize2 : Maximize2}
+          label={expanded ? 'Exit full screen (Esc)' : 'Full screen (or double-click the chart)'}
+          onClick={() => setExpanded((v) => !v)}
+        />
       </header>
+
+      <div
+        role="toolbar"
+        aria-label="Drawing tools"
+        className="flex items-center gap-0.5 border-b border-border bg-panel px-2 py-1"
+      >
+        <ToolButton icon={MousePointer2} label="Move chart (Esc)" active={tool === 'none'} onClick={() => setTool('none')} />
+        <ToolButton icon={Slash} label="Trend line — drag on the chart" active={tool === 'trend'} onClick={() => setTool('trend')} />
+        <ToolButton icon={Minus} label="Horizontal line — click a price" active={tool === 'hline'} onClick={() => setTool('hline')} />
+        <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+        <ToolButton
+          icon={Undo2}
+          label="Undo last line"
+          disabled={drawings.length === 0}
+          onClick={() => {
+            setDrawings((prev) => prev.slice(0, -1))
+            setSelected(null)
+          }}
+        />
+        <ToolButton
+          icon={Trash2}
+          label="Clear all lines"
+          disabled={drawings.length === 0}
+          onClick={() => {
+            setDrawings(() => [])
+            setSelected(null)
+          }}
+        />
+        <span className="ml-2 min-w-0 truncate text-[11px] text-muted-foreground">
+          {tool === 'trend'
+            ? 'Drag on the chart to draw a line'
+            : tool === 'hline'
+              ? 'Click a price to place a line'
+              : selected
+                ? 'Line selected'
+                : drawings.length > 0
+                  ? 'Click a line to select it'
+                  : 'Pick a tool to draw on the chart'}
+        </span>
+        {selected ? (
+          <button
+            type="button"
+            onClick={() => removeDrawing(selected)}
+            className="ml-auto flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-down hover:bg-down/15"
+          >
+            <X className="size-3.5" aria-hidden />
+            Delete line
+          </button>
+        ) : null}
+      </div>
 
       {status ? <StatusBar status={status} /> : null}
 
-      <div className="relative min-h-0 flex-1">
+      <div
+        className="relative min-h-0 flex-1"
+        onDoubleClick={() => {
+          if (tool === 'none') setExpanded((v) => !v)
+        }}
+      >
         {bars.length > 0 ? (
-          <PriceChart bars={bars} output={output} interval={slot.interval} strategy={strategy} settings={settings} />
+          <PriceChart
+            bars={bars}
+            output={output}
+            interval={slot.interval}
+            strategy={strategy}
+            settings={settings}
+            drawings={drawings}
+            tool={tool}
+            selectedDrawing={selected}
+            onAddDrawing={(d) => setDrawings((prev) => [...prev, d])}
+            onSelectDrawing={setSelected}
+          />
         ) : null}
 
         {isLoading && bars.length === 0 ? (
@@ -162,6 +298,38 @@ export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: s
         </button>
       </footer>
     </section>
+    </>
+  )
+}
+
+function ToolButton({
+  icon: Icon,
+  label,
+  active,
+  disabled,
+  onClick,
+}: {
+  icon: LucideIcon
+  label: string
+  active?: boolean
+  disabled?: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      aria-pressed={active}
+      title={label}
+      disabled={disabled}
+      onClick={onClick}
+      className={clsx(
+        'flex size-7 shrink-0 items-center justify-center rounded transition-colors disabled:pointer-events-none disabled:opacity-35',
+        active ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-border hover:text-foreground',
+      )}
+    >
+      <Icon className="size-4" aria-hidden />
+    </button>
   )
 }
 
