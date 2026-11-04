@@ -1,14 +1,13 @@
-import { autoLevels, ema, macd, rsi, sma, vwap, type Level, type Series } from './indicators'
+import { autoLevels, ema, macd, sma, vwap, type Level, type Series } from './indicators'
 import type { Bar } from './types'
 
 export interface StrategyConfig {
   ma: { enabled: boolean; type: 'SMA' | 'EMA'; fast: number; slow: number }
   vwap: { enabled: boolean }
-  rsi: { enabled: boolean; period: number; overbought: number; oversold: number }
   macd: { enabled: boolean; fast: number; slow: number; signal: number }
   levels: { enabled: boolean; auto: boolean; lookback: number; maxLevels: number; manual: string }
-  entry: { maCrossUp: boolean; rsiOversoldExit: boolean; macdCrossUp: boolean; requireAboveVwap: boolean }
-  exit: { maCrossDown: boolean; rsiOverbought: boolean; macdCrossDown: boolean }
+  entry: { maCrossUp: boolean; macdCrossUp: boolean; requireAboveVwap: boolean }
+  exit: { maCrossDown: boolean; macdCrossDown: boolean }
   risk: { useStop: boolean; stopPct: number; useTarget: boolean; targetPct: number }
   showSignals: boolean
 }
@@ -16,11 +15,10 @@ export interface StrategyConfig {
 export const DEFAULT_STRATEGY: StrategyConfig = {
   ma: { enabled: true, type: 'EMA', fast: 9, slow: 21 },
   vwap: { enabled: true },
-  rsi: { enabled: true, period: 14, overbought: 70, oversold: 30 },
   macd: { enabled: false, fast: 12, slow: 26, signal: 9 },
   levels: { enabled: true, auto: true, lookback: 10, maxLevels: 2, manual: '' },
-  entry: { maCrossUp: true, rsiOversoldExit: false, macdCrossUp: false, requireAboveVwap: false },
-  exit: { maCrossDown: true, rsiOverbought: false, macdCrossDown: false },
+  entry: { maCrossUp: true, macdCrossUp: false, requireAboveVwap: false },
+  exit: { maCrossDown: true, macdCrossDown: false },
   risk: { useStop: true, stopPct: 1, useTarget: true, targetPct: 2 },
   showSignals: true,
 }
@@ -35,7 +33,6 @@ export interface StrategyOutput {
   maFast?: Series
   maSlow?: Series
   vwap?: Series
-  rsi?: Series
   macd?: { line: Series; signal: Series; hist: Series }
   levels: Level[]
   signals: SignalMarker[]
@@ -79,7 +76,6 @@ export function runStrategy(bars: Bar[], cfg: StrategyConfig, intraday: boolean)
   }
   const hasVolume = bars.some((b) => (b.volume ?? 0) > 0)
   if (cfg.vwap.enabled && intraday && hasVolume) out.vwap = vwap(bars)
-  if (cfg.rsi.enabled) out.rsi = rsi(closes, cfg.rsi.period)
   if (cfg.macd.enabled) out.macd = macd(closes, cfg.macd.fast, cfg.macd.slow, cfg.macd.signal)
 
   if (cfg.levels.enabled && bars.length > 0) {
@@ -94,7 +90,6 @@ export function runStrategy(bars: Bar[], cfg: StrategyConfig, intraday: boolean)
 
   const entryTriggers = [
     cfg.entry.maCrossUp && out.maFast && out.maSlow,
-    cfg.entry.rsiOversoldExit && out.rsi,
     cfg.entry.macdCrossUp && out.macd,
   ].some(Boolean)
   if (!entryTriggers) return out
@@ -117,7 +112,6 @@ export function runStrategy(bars: Bar[], cfg: StrategyConfig, intraday: boolean)
       }
       const exit =
         (cfg.exit.maCrossDown && out.maFast && out.maSlow && crossDown(out.maFast, out.maSlow, i)) ||
-        (cfg.exit.rsiOverbought && out.rsi && crossUp(out.rsi, cfg.rsi.overbought, i)) ||
         (cfg.exit.macdCrossDown && out.macd && crossDown(out.macd.line, out.macd.signal, i))
       if (exit) {
         out.signals.push({ time: bar.time, kind: 'exit', price: bar.close })
@@ -128,7 +122,6 @@ export function runStrategy(bars: Bar[], cfg: StrategyConfig, intraday: boolean)
 
     const trigger =
       (cfg.entry.maCrossUp && out.maFast && out.maSlow && crossUp(out.maFast, out.maSlow, i)) ||
-      (cfg.entry.rsiOversoldExit && out.rsi && crossUp(out.rsi, cfg.rsi.oversold, i)) ||
       (cfg.entry.macdCrossUp && out.macd && crossUp(out.macd.line, out.macd.signal, i))
     if (!trigger) continue
 

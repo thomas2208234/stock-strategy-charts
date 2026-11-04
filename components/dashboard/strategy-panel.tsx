@@ -72,15 +72,6 @@ export function StrategyPanel() {
         />
       </Section>
 
-      <Section title="RSI" description="A 0–100 momentum gauge shown below the chart. High readings mean price rose fast; low readings mean it fell fast.">
-        <Switch label="RSI pane" checked={s.rsi.enabled} onChange={(v) => set('rsi', { enabled: v })} />
-        <div className="grid grid-cols-3 gap-3">
-          <NumberField label="Period" value={s.rsi.period} min={2} max={100} onChange={(v) => set('rsi', { period: v })} disabled={!s.rsi.enabled} />
-          <NumberField label="Overbought" value={s.rsi.overbought} min={50} max={99} onChange={(v) => set('rsi', { overbought: v })} disabled={!s.rsi.enabled} />
-          <NumberField label="Oversold" value={s.rsi.oversold} min={1} max={50} onChange={(v) => set('rsi', { oversold: v })} disabled={!s.rsi.enabled} />
-        </div>
-      </Section>
-
       <Section title="MACD" description="Another momentum indicator in its own pane. Crosses of its two lines hint at trend changes.">
         <Switch label="MACD pane" checked={s.macd.enabled} onChange={(v) => set('macd', { enabled: v })} />
         <div className="grid grid-cols-3 gap-3">
@@ -119,7 +110,6 @@ export function StrategyPanel() {
 
       <Section title="When to buy" description="A buy signal appears when any switched-on rule is met.">
         <Switch label="Fast MA crosses above slow MA" checked={s.entry.maCrossUp} onChange={(v) => set('entry', { maCrossUp: v })} disabled={!s.ma.enabled} />
-        <Switch label="RSI crosses up out of oversold" checked={s.entry.rsiOversoldExit} onChange={(v) => set('entry', { rsiOversoldExit: v })} disabled={!s.rsi.enabled} />
         <Switch label="MACD crosses above signal" checked={s.entry.macdCrossUp} onChange={(v) => set('entry', { macdCrossUp: v })} disabled={!s.macd.enabled} />
         <Switch
           label="Filter: close above VWAP"
@@ -132,7 +122,6 @@ export function StrategyPanel() {
 
       <Section title="When to sell" description="The simulated trade closes when any switched-on rule is met.">
         <Switch label="Fast MA crosses below slow MA" checked={s.exit.maCrossDown} onChange={(v) => set('exit', { maCrossDown: v })} disabled={!s.ma.enabled} />
-        <Switch label="RSI crosses into overbought" checked={s.exit.rsiOverbought} onChange={(v) => set('exit', { rsiOverbought: v })} disabled={!s.rsi.enabled} />
         <Switch label="MACD crosses below signal" checked={s.exit.macdCrossDown} onChange={(v) => set('exit', { macdCrossDown: v })} disabled={!s.macd.enabled} />
       </Section>
 

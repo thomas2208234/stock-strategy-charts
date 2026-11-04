@@ -160,13 +160,6 @@ export function GuideButton() {
               </Item>
             </Group>
 
-            <Group title="Lower pane">
-              <Item swatch={{ kind: 'line', color: 'border-warning' }} title="RSI (momentum)">
-                Ranges 0–100. Above the upper dashed line is &quot;overbought&quot;, below the lower one is
-                &quot;oversold&quot;.
-              </Item>
-            </Group>
-
             <Group title="Data">
               <Item swatch={{ kind: 'tag', color: 'bg-warning', text: '•' }} title="Delayed / market closed">
                 The newest candle is old — usually because the market is closed.
