@@ -27,17 +27,10 @@ import type { Bar, Interval } from '@/lib/types'
 import type { ChartSettings } from './dashboard-context'
 import { DrawingLayer, type ChartApi, type Drawing, type DrawTool } from './drawing-layer'
 
-const MA_NAMES: Record<StrategyConfig['ma']['type'], string> = {
-  EMA: 'Exponential Moving Average',
-  SMA: 'Simple Moving Average',
-}
-
 interface Refs {
   chart: IChartApi
   candles: ISeriesApi<'Candlestick'>
   volume?: ISeriesApi<'Histogram'>
-  maFast?: ISeriesApi<'Line'>
-  maSlow?: ISeriesApi<'Line'>
   vwap?: ISeriesApi<'Line'>
   rsi?: ISeriesApi<'Line'>
   macdLine?: ISeriesApi<'Line'>
@@ -82,8 +75,6 @@ function applyData(refs: Refs, bars: Bar[], out: StrategyOutput, cfg: StrategyCo
       .filter((b) => b.volume !== undefined)
       .map((b) => ({ time: ts(b.time), value: b.volume ?? 0, color: b.close >= b.open ? `${C.up}55` : `${C.down}55` })),
   )
-  refs.maFast?.setData(line(bars, out.maFast))
-  refs.maSlow?.setData(line(bars, out.maSlow))
   refs.vwap?.setData(line(bars, out.vwap))
   refs.rsi?.setData(line(bars, out.rsi))
   refs.macdLine?.setData(line(bars, out.macd?.line))
@@ -172,7 +163,6 @@ export function PriceChart({
   const [hover, setHover] = useState<Bar | null>(null)
 
   const structureKey = [
-    strategy.ma.enabled,
     strategy.vwap.enabled && intraday,
     strategy.rsi.enabled,
     strategy.rsi.overbought,
@@ -236,10 +226,6 @@ export function PriceChart({
       r.volume.priceScale().applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } })
     }
     const overlay = { lineWidth: 1 as const, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }
-    if (strategy.ma.enabled) {
-      r.maFast = chart.addSeries(LineSeries, { ...overlay, color: C.accent })
-      r.maSlow = chart.addSeries(LineSeries, { ...overlay, color: C.primary })
-    }
     if (strategy.vwap.enabled && intraday) {
       r.vwap = chart.addSeries(LineSeries, { ...overlay, color: C.foreground, lineStyle: LineStyle.Dashed })
     }
@@ -320,18 +306,6 @@ export function PriceChart({
             </span>
           </div>
           <div className="flex flex-wrap gap-x-3">
-            {output.maFast ? (
-              <span className="flex items-center gap-1 text-warning">
-                <span className="w-2.5 border-t-2 border-warning" aria-hidden />
-                Fast <abbr title={MA_NAMES[strategy.ma.type]} className="cursor-help no-underline">{strategy.ma.type}</abbr> {strategy.ma.fast} {legendValue(output.maFast)}
-              </span>
-            ) : null}
-            {output.maSlow ? (
-              <span className="flex items-center gap-1 text-primary">
-                <span className="w-2.5 border-t-2 border-primary" aria-hidden />
-                Slow <abbr title={MA_NAMES[strategy.ma.type]} className="cursor-help no-underline">{strategy.ma.type}</abbr> {strategy.ma.slow} {legendValue(output.maSlow)}
-              </span>
-            ) : null}
             {output.vwap ? (
               <span className="flex items-center gap-1 text-foreground">
                 <span className="w-2.5 border-t-2 border-dashed border-foreground" aria-hidden />
