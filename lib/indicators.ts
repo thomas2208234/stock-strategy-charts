@@ -124,5 +124,9 @@ export function autoLevels(bars: Bar[], lookback: number, maxLevels: number): Le
     }
   }
 
-  return levels.sort((a, b) => Math.abs(a.price - last) - Math.abs(b.price - last)).slice(0, maxLevels)
+  const byDistance = levels.sort((a, b) => Math.abs(a.price - last) - Math.abs(b.price - last))
+  const nearestSupport = byDistance.find((l) => l.kind === 'support')
+  const nearestResistance = byDistance.find((l) => l.kind === 'resistance')
+  const priority = [nearestSupport, nearestResistance].filter((l): l is Level => l !== undefined)
+  return [...priority, ...byDistance.filter((l) => !priority.includes(l))].slice(0, maxLevels)
 }

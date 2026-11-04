@@ -18,7 +18,7 @@ export const DEFAULT_STRATEGY: StrategyConfig = {
   vwap: { enabled: true },
   rsi: { enabled: true, period: 14, overbought: 70, oversold: 30 },
   macd: { enabled: false, fast: 12, slow: 26, signal: 9 },
-  levels: { enabled: true, auto: true, lookback: 10, maxLevels: 4, manual: '' },
+  levels: { enabled: true, auto: true, lookback: 10, maxLevels: 2, manual: '' },
   entry: { maCrossUp: true, rsiOversoldExit: false, macdCrossUp: false, requireAboveVwap: false },
   exit: { maCrossDown: true, rsiOverbought: false, macdCrossDown: false },
   risk: { useStop: true, stopPct: 1, useTarget: true, targetPct: 2 },
