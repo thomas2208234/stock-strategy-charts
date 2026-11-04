@@ -2,6 +2,7 @@
 
 import { RotateCcw } from 'lucide-react'
 import { DEFAULT_STRATEGY, type StrategyConfig } from '@/lib/strategy'
+import { describeStrategy } from '@/lib/strategy-text'
 import { NumberField, Section, Segmented, Switch } from './controls'
 import { useDashboard } from './dashboard-context'
 
@@ -12,15 +13,21 @@ export function StrategyPanel() {
   const set = <G extends Group>(group: G, patch: Partial<StrategyConfig[G]>) =>
     setStrategy((prev) => ({ ...prev, [group]: { ...prev[group], ...patch } }))
 
+  const summary = describeStrategy(s)
+
   return (
     <div className="flex flex-col">
-      <div className="mx-4 my-3 rounded border border-warning/40 bg-warning/10 px-3 py-2 text-xs leading-relaxed text-foreground">
-        <strong className="font-semibold">Educational only.</strong> Signals are rule-based visual markers computed in
-        your browser. They are not financial advice and nothing here places trades.
+      <div className="mx-4 my-4 flex flex-col gap-2 rounded-lg border border-primary/30 bg-primary/10 p-3">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">Your strategy in plain English</span>
+        <p className="text-pretty text-sm leading-relaxed text-foreground">{summary.buy}</p>
+        {summary.sell ? <p className="text-pretty text-sm leading-relaxed text-foreground">{summary.sell}</p> : null}
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
+          Simulated only — signals are drawn on the chart, no real trades are placed. Not financial advice.
+        </p>
       </div>
 
       <Section
-        title="Signals"
+        title="Signals on chart"
         aside={
           <button
             type="button"
@@ -39,7 +46,7 @@ export function StrategyPanel() {
         />
       </Section>
 
-      <Section title="Moving averages">
+      <Section title="Moving averages" description="Smoothed trend lines. When the fast line crosses above the slow one, momentum is turning up.">
         <Switch label="MA crossover lines" checked={s.ma.enabled} onChange={(v) => set('ma', { enabled: v })} />
         <Segmented
           label="Type"
@@ -56,7 +63,7 @@ export function StrategyPanel() {
         </div>
       </Section>
 
-      <Section title="VWAP">
+      <Section title="VWAP" description="The average price paid today, weighted by volume. Price above VWAP suggests buyers are in control.">
         <Switch
           label="Session VWAP"
           description="Intraday only; resets each UTC day. Hidden for instruments without volume."
@@ -65,7 +72,7 @@ export function StrategyPanel() {
         />
       </Section>
 
-      <Section title="RSI">
+      <Section title="RSI" description="A 0–100 momentum gauge shown below the chart. High readings mean price rose fast; low readings mean it fell fast.">
         <Switch label="RSI pane" checked={s.rsi.enabled} onChange={(v) => set('rsi', { enabled: v })} />
         <div className="grid grid-cols-3 gap-3">
           <NumberField label="Period" value={s.rsi.period} min={2} max={100} onChange={(v) => set('rsi', { period: v })} disabled={!s.rsi.enabled} />
@@ -74,7 +81,7 @@ export function StrategyPanel() {
         </div>
       </Section>
 
-      <Section title="MACD">
+      <Section title="MACD" description="Another momentum indicator in its own pane. Crosses of its two lines hint at trend changes.">
         <Switch label="MACD pane" checked={s.macd.enabled} onChange={(v) => set('macd', { enabled: v })} />
         <div className="grid grid-cols-3 gap-3">
           <NumberField label="Fast" value={s.macd.fast} min={2} max={100} onChange={(v) => set('macd', { fast: v })} disabled={!s.macd.enabled} />
@@ -83,7 +90,7 @@ export function StrategyPanel() {
         </div>
       </Section>
 
-      <Section title="Support / resistance">
+      <Section title="Support & resistance" description="Price zones where the market has turned before. Add your own levels or let them be detected.">
         <Switch label="Show levels" checked={s.levels.enabled} onChange={(v) => set('levels', { enabled: v })} />
         <Switch
           label="Auto-detect swing levels"
@@ -110,7 +117,7 @@ export function StrategyPanel() {
         </div>
       </Section>
 
-      <Section title="Entry rules (any)">
+      <Section title="When to buy" description="A buy signal appears when any switched-on rule is met.">
         <Switch label="Fast MA crosses above slow MA" checked={s.entry.maCrossUp} onChange={(v) => set('entry', { maCrossUp: v })} disabled={!s.ma.enabled} />
         <Switch label="RSI crosses up out of oversold" checked={s.entry.rsiOversoldExit} onChange={(v) => set('entry', { rsiOversoldExit: v })} disabled={!s.rsi.enabled} />
         <Switch label="MACD crosses above signal" checked={s.entry.macdCrossUp} onChange={(v) => set('entry', { macdCrossUp: v })} disabled={!s.macd.enabled} />
@@ -123,13 +130,13 @@ export function StrategyPanel() {
         />
       </Section>
 
-      <Section title="Exit rules (any)">
+      <Section title="When to sell" description="The simulated trade closes when any switched-on rule is met.">
         <Switch label="Fast MA crosses below slow MA" checked={s.exit.maCrossDown} onChange={(v) => set('exit', { maCrossDown: v })} disabled={!s.ma.enabled} />
         <Switch label="RSI crosses into overbought" checked={s.exit.rsiOverbought} onChange={(v) => set('exit', { rsiOverbought: v })} disabled={!s.rsi.enabled} />
         <Switch label="MACD crosses below signal" checked={s.exit.macdCrossDown} onChange={(v) => set('exit', { macdCrossDown: v })} disabled={!s.macd.enabled} />
       </Section>
 
-      <Section title="Stop loss / take profit">
+      <Section title="Stop loss & take profit" description="Automatic exits based on how far price moves from your entry.">
         <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-2">
             <Switch label="Stop" checked={s.risk.useStop} onChange={(v) => set('risk', { useStop: v })} />

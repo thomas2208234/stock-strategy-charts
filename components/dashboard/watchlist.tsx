@@ -21,8 +21,8 @@ export function Watchlist() {
   return (
     <div className="flex flex-col">
       <p className="px-4 py-3 text-xs leading-relaxed text-muted-foreground">
-        Click a symbol to load it into the active chart. Prices appear for symbols currently on a chart — the watchlist
-        does not poll on its own, to conserve API credits.
+        <span className="font-medium text-foreground">Click any symbol</span> to show it in the highlighted chart.
+        Prices only appear for symbols already on a chart, to save API credits.
       </p>
       {GROUPS.map(({ asset, title }) => {
         const items = watchlist.filter((w) => w.asset === asset)
