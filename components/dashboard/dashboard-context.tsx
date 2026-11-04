@@ -21,7 +21,7 @@ export interface ChartSettings {
 
 export const DEFAULT_SETTINGS: ChartSettings = {
   showVolume: true,
-  showGrid: true,
+  showGrid: false,
   magnetCrosshair: false,
   localTime: true,
   refreshSeconds: 60,
