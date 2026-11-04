@@ -26,6 +26,11 @@ import { CHART_COLORS as C } from '@/lib/theme'
 import type { Bar, Interval } from '@/lib/types'
 import type { ChartSettings } from './dashboard-context'
 
+const MA_NAMES: Record<StrategyConfig['ma']['type'], string> = {
+  EMA: 'Exponential Moving Average',
+  SMA: 'Simple Moving Average',
+}
+
 interface Refs {
   chart: IChartApi
   candles: ISeriesApi<'Candlestick'>
@@ -293,21 +298,21 @@ export function PriceChart({
           </div>
           <div className="flex flex-wrap gap-x-3">
             {output.maFast ? (
-              <span className="flex items-center gap-1 text-warning" title="Fast moving average">
+              <span className="flex items-center gap-1 text-warning">
                 <span className="w-2.5 border-t-2 border-warning" aria-hidden />
-                Fast {strategy.ma.type} {strategy.ma.fast} {legendValue(output.maFast)}
+                Fast <abbr title={MA_NAMES[strategy.ma.type]} className="cursor-help no-underline">{strategy.ma.type}</abbr> {strategy.ma.fast} {legendValue(output.maFast)}
               </span>
             ) : null}
             {output.maSlow ? (
-              <span className="flex items-center gap-1 text-primary" title="Slow moving average">
+              <span className="flex items-center gap-1 text-primary">
                 <span className="w-2.5 border-t-2 border-primary" aria-hidden />
-                Slow {strategy.ma.type} {strategy.ma.slow} {legendValue(output.maSlow)}
+                Slow <abbr title={MA_NAMES[strategy.ma.type]} className="cursor-help no-underline">{strategy.ma.type}</abbr> {strategy.ma.slow} {legendValue(output.maSlow)}
               </span>
             ) : null}
             {output.vwap ? (
-              <span className="flex items-center gap-1 text-foreground" title="Volume-weighted average price">
+              <span className="flex items-center gap-1 text-foreground">
                 <span className="w-2.5 border-t-2 border-dashed border-foreground" aria-hidden />
-                VWAP {legendValue(output.vwap)}
+                <abbr title="Volume-Weighted Average Price" className="cursor-help no-underline">VWAP</abbr> {legendValue(output.vwap)}
               </span>
             ) : null}
           </div>

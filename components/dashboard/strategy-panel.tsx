@@ -46,7 +46,7 @@ export function StrategyPanel() {
         />
       </Section>
 
-      <Section title="Moving averages" description="Smoothed trend lines. When the fast line crosses above the slow one, momentum is turning up.">
+      <Section title="Moving averages" description="Smoothed trend lines. When the fast line crosses above the slow one, momentum is turning up. EMA = Exponential Moving Average (reacts faster to recent prices). SMA = Simple Moving Average (equal weight to every price).">
         <Switch label="MA crossover lines" checked={s.ma.enabled} onChange={(v) => set('ma', { enabled: v })} />
         <Segmented
           label="Type"
@@ -63,7 +63,7 @@ export function StrategyPanel() {
         </div>
       </Section>
 
-      <Section title="VWAP" description="The average price paid today, weighted by volume. Price above VWAP suggests buyers are in control.">
+      <Section title="VWAP · Volume-Weighted Average Price" description="The average price paid today, weighted by volume. Price above VWAP suggests buyers are in control.">
         <Switch
           label="Session VWAP"
           description="Intraday only; resets each UTC day. Hidden for instruments without volume."
