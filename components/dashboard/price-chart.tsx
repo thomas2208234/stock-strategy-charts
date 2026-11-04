@@ -18,10 +18,10 @@ import {
   type Time,
   type UTCTimestamp,
 } from 'lightweight-charts'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Series } from '@/lib/indicators'
 import { formatPrice } from '@/lib/freshness'
-import { runStrategy, type StrategyConfig, type StrategyOutput } from '@/lib/strategy'
+import type { StrategyConfig, StrategyOutput } from '@/lib/strategy'
 import { CHART_COLORS as C } from '@/lib/theme'
 import type { Bar, Interval } from '@/lib/types'
 import type { ChartSettings } from './dashboard-context'
@@ -136,11 +136,13 @@ function applyData(refs: Refs, bars: Bar[], out: StrategyOutput, cfg: StrategyCo
 
 export function PriceChart({
   bars,
+  output,
   interval,
   strategy,
   settings,
 }: {
   bars: Bar[]
+  output: StrategyOutput
   interval: Interval
   strategy: StrategyConfig
   settings: ChartSettings
@@ -148,7 +150,6 @@ export function PriceChart({
   const containerRef = useRef<HTMLDivElement>(null)
   const refs = useRef<Refs | null>(null)
   const intraday = interval !== '1day'
-  const output = useMemo(() => runStrategy(bars, strategy, intraday), [bars, strategy, intraday])
   const latest = useRef({ bars, output, strategy })
   latest.current = { bars, output, strategy }
   const [hover, setHover] = useState<Bar | null>(null)
@@ -228,14 +229,14 @@ export function PriceChart({
 
     let pane = 1
     if (strategy.rsi.enabled) {
-      r.rsi = chart.addSeries(LineSeries, { lineWidth: 1, color: C.accent, priceLineVisible: false }, pane)
+      r.rsi = chart.addSeries(LineSeries, { lineWidth: 1, color: C.accent, priceLineVisible: false, title: 'RSI' }, pane)
       r.rsi.createPriceLine({ price: strategy.rsi.overbought, color: C.muted, lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: false, title: '' })
       r.rsi.createPriceLine({ price: strategy.rsi.oversold, color: C.muted, lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: false, title: '' })
       pane++
     }
     if (strategy.macd.enabled) {
       r.macdHist = chart.addSeries(HistogramSeries, { priceLineVisible: false, lastValueVisible: false }, pane)
-      r.macdLine = chart.addSeries(LineSeries, { lineWidth: 1, color: C.primary, priceLineVisible: false }, pane)
+      r.macdLine = chart.addSeries(LineSeries, { lineWidth: 1, color: C.primary, priceLineVisible: false, title: 'MACD' }, pane)
       r.macdSignal = chart.addSeries(LineSeries, { lineWidth: 1, color: C.accent, priceLineVisible: false, lastValueVisible: false }, pane)
       pane++
     }
@@ -290,19 +291,25 @@ export function PriceChart({
               C <span className={shown.close >= shown.open ? 'text-up' : 'text-down'}>{formatPrice(shown.close)}</span>
             </span>
           </div>
-          <div className="flex flex-wrap gap-x-2">
+          <div className="flex flex-wrap gap-x-3">
             {output.maFast ? (
-              <span className="text-warning">
-                {strategy.ma.type} {strategy.ma.fast} {legendValue(output.maFast)}
+              <span className="flex items-center gap-1 text-warning" title="Fast moving average">
+                <span className="w-2.5 border-t-2 border-warning" aria-hidden />
+                Fast {strategy.ma.type} {strategy.ma.fast} {legendValue(output.maFast)}
               </span>
             ) : null}
             {output.maSlow ? (
-              <span className="text-primary">
-                {strategy.ma.type} {strategy.ma.slow} {legendValue(output.maSlow)}
+              <span className="flex items-center gap-1 text-primary" title="Slow moving average">
+                <span className="w-2.5 border-t-2 border-primary" aria-hidden />
+                Slow {strategy.ma.type} {strategy.ma.slow} {legendValue(output.maSlow)}
               </span>
             ) : null}
-            {output.vwap ? <span className="text-foreground">VWAP {legendValue(output.vwap)}</span> : null}
-            {strategy.vwap.enabled && !intraday ? <span className="text-muted-foreground">VWAP n/a on daily</span> : null}
+            {output.vwap ? (
+              <span className="flex items-center gap-1 text-foreground" title="Volume-weighted average price">
+                <span className="w-2.5 border-t-2 border-dashed border-foreground" aria-hidden />
+                VWAP {legendValue(output.vwap)}
+              </span>
+            ) : null}
           </div>
         </div>
       ) : null}

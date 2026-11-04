@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { ChartPanel } from './chart-panel'
 import { ConnectionStatus } from './connection-status'
 import { DashboardProvider, useDashboard } from './dashboard-context'
+import { GuideButton } from './guide-dialog'
 import { SettingsPanel } from './settings-panel'
 import { StrategyPanel } from './strategy-panel'
 import { Watchlist } from './watchlist'
@@ -32,13 +33,23 @@ function Shell() {
 
   return (
     <div className="flex min-h-dvh flex-col bg-background text-foreground lg:h-dvh">
-      <header className="flex items-center gap-3 border-b border-border bg-panel px-3 py-2">
-        <div className="flex items-center gap-2">
-          <CandlestickChart className="size-5 text-primary" aria-hidden />
-          <h1 className="text-sm font-semibold">Strat Chart</h1>
+      <header className="flex items-center gap-3 border-b border-border bg-panel px-4 py-2.5">
+        <div className="flex items-center gap-2.5">
+          <span className="flex size-8 items-center justify-center rounded-md bg-primary/15">
+            <CandlestickChart className="size-4.5 text-primary" aria-hidden />
+          </span>
+          <div className="flex flex-col leading-tight">
+            <h1 className="text-sm font-semibold">Strat Chart</h1>
+            <p className="hidden text-xs text-muted-foreground sm:block">
+              Test a trading strategy across four charts at once
+            </p>
+          </div>
         </div>
-        <div className="ml-auto min-w-0">
-          <ConnectionStatus />
+        <div className="ml-auto flex min-w-0 items-center gap-4">
+          <div className="hidden min-w-0 md:block">
+            <ConnectionStatus />
+          </div>
+          <GuideButton />
         </div>
       </header>
 
@@ -52,8 +63,8 @@ function Shell() {
                 onClick={() => setActiveChart(c.id)}
                 aria-current={activeChart === c.id ? 'true' : undefined}
                 className={clsx(
-                  'shrink-0 rounded px-3 py-1.5 font-mono text-xs',
-                  activeChart === c.id ? 'bg-primary text-primary-foreground' : 'bg-panel text-muted-foreground',
+                  'shrink-0 rounded-md px-3 py-1.5 font-mono text-xs font-semibold',
+                  activeChart === c.id ? 'bg-primary text-primary-foreground' : 'border border-border bg-panel text-muted-foreground',
                 )}
               >
                 {c.symbol}
@@ -94,9 +105,12 @@ function Shell() {
           <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="min-h-0 flex-1 overflow-y-auto">
             {tab === 'watchlist' ? <Watchlist /> : tab === 'strategy' ? <StrategyPanel /> : <SettingsPanel />}
           </div>
-          <p className="border-t border-border px-4 py-2 text-[11px] leading-relaxed text-muted-foreground">
-            Market data by Twelve Data. Educational tool — not financial advice.
-          </p>
+          <div className="flex flex-col gap-1.5 border-t border-border px-4 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
+            <div className="md:hidden">
+              <ConnectionStatus />
+            </div>
+            <p>Market data by Twelve Data. Educational tool — not financial advice.</p>
+          </div>
         </aside>
       </div>
     </div>
