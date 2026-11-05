@@ -152,11 +152,17 @@ export function GuideButton() {
               <Item swatch={{ kind: 'arrow', color: 'text-warning', dir: 'down' }} title="Exit">
                 A sell rule triggered, closing the simulated trade.
               </Item>
+              <Item swatch={{ kind: 'arrow', color: 'text-primary', dir: 'down' }} title="Short">
+                A short entry: the simulated trade profits if price falls. Shown above the bar.
+              </Item>
+              <Item swatch={{ kind: 'arrow', color: 'text-warning', dir: 'up' }} title="Cover">
+                An exit rule closed the short by buying it back.
+              </Item>
               <Item swatch={{ kind: 'arrow', color: 'text-up', dir: 'down' }} title="TP · take profit">
-                Price reached your profit target.
+                Price reached your profit target (arrow points up when covering a short).
               </Item>
               <Item swatch={{ kind: 'arrow', color: 'text-down', dir: 'down' }} title="SL · stop loss">
-                Price fell to your stop, limiting the loss.
+                Price moved against you to your stop, limiting the loss.
               </Item>
             </Group>
 

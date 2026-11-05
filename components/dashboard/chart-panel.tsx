@@ -373,27 +373,27 @@ function ToolButton({
 }
 
 function StatusBar({ status }: { status: SignalStatus }) {
+  const inTrade = status.tone === 'long' || status.tone === 'short'
   return (
     <div
       className={clsx(
         'flex items-center gap-2 border-b px-3 py-1.5 text-xs',
-        status.tone === 'long' && 'border-primary/30 bg-primary/10',
-        status.tone === 'flat' && 'border-border bg-background',
-        status.tone === 'off' && 'border-border bg-background',
+        inTrade && 'border-primary/30 bg-primary/10',
+        !inTrade && 'border-border bg-background',
       )}
     >
       <span
         aria-hidden
         className={clsx(
           'size-2 shrink-0 rounded-full',
-          status.tone === 'long' && 'animate-pulse bg-primary',
+          inTrade && 'animate-pulse bg-primary',
           status.tone === 'flat' && 'bg-muted-foreground',
           status.tone === 'off' && 'border border-muted-foreground',
         )}
       />
       <span className="shrink-0 font-medium text-foreground">{status.title}</span>
       {status.detail ? <span className="min-w-0 truncate text-muted-foreground">{status.detail}</span> : null}
-      {status.tone === 'long' ? (
+      {status.tone === 'long' || status.tone === 'short' ? (
         <span
           className={clsx('ml-auto shrink-0 font-mono font-semibold', status.pnl >= 0 ? 'text-up' : 'text-down')}
           title="Simulated profit or loss since entry"
