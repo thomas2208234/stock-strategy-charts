@@ -18,8 +18,7 @@ import {
   type Time,
   type UTCTimestamp,
 } from 'lightweight-charts'
-import clsx from 'clsx'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import type { Series } from '@/lib/indicators'
 import { formatPrice } from '@/lib/freshness'
 import type { StrategyConfig, StrategyOutput } from '@/lib/strategy'
@@ -27,7 +26,7 @@ import { CHART_COLORS as C } from '@/lib/theme'
 import type { Bar, Interval } from '@/lib/types'
 import type { ChartSettings } from './dashboard-context'
 import { DrawingLayer, type ChartApi, type Drawing, type DrawTool } from './drawing-layer'
-import { Magnifier } from './magnifier'
+import { ZoomLayer, type ZoomHandle } from './zoom-layer'
 
 interface Refs {
   chart: IChartApi
@@ -142,9 +141,15 @@ export function PriceChart({
   selectedDrawing,
   onAddDrawing,
   onSelectDrawing,
-  magnifyZoom = 0,
+  zoomMode = false,
+  zoomRef,
+  onZoomed,
+  onZoomDepthChange,
 }: {
-  magnifyZoom?: number
+  zoomMode?: boolean
+  zoomRef?: RefObject<ZoomHandle | null>
+  onZoomed: () => void
+  onZoomDepthChange: (depth: number) => void
   bars: Bar[]
   output: StrategyOutput
   interval: Interval
@@ -157,7 +162,6 @@ export function PriceChart({
   onSelectDrawing: (id: string | null) => void
 }) {
   const [api, setApi] = useState<ChartApi | null>(null)
-  const [host, setHost] = useState<HTMLDivElement | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const refs = useRef<Refs | null>(null)
   const intraday = interval !== '1day'
@@ -273,12 +277,11 @@ export function PriceChart({
 
   return (
     <div
-      ref={setHost}
-      className={clsx('relative h-full w-full', magnifyZoom > 0 && 'cursor-zoom-in')}
+      className="relative h-full w-full"
       onPointerDown={() => onSelectDrawing(null)}
     >
       <div ref={containerRef} className="absolute inset-0" />
-      {api && magnifyZoom > 0 ? <Magnifier chart={api.chart} host={host} zoom={magnifyZoom} /> : null}
+      <ZoomLayer api={api} active={zoomMode} handleRef={zoomRef} onZoomed={onZoomed} onDepthChange={onZoomDepthChange} />
       <DrawingLayer
         api={api}
         bars={bars}
