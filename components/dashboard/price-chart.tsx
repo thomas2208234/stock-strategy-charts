@@ -109,23 +109,28 @@ function applyData(refs: Refs, bars: Bar[], out: StrategyOutput, cfg: StrategyCo
         refs.candles.createPriceLine({ price, color, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title }),
       )
     }
-    add(out.open.entry, C.primary, 'Entry')
+    add(out.open.entry, C.primary, out.open.side === 'short' ? 'Short entry' : 'Entry')
     add(out.open.stop, C.down, 'Stop')
     add(out.open.target, C.up, 'Target')
   }
 
   const markers: SeriesMarker<Time>[] = cfg.showSignals
-    ? out.signals.map((s) =>
-        s.kind === 'entry'
-          ? { time: ts(s.time), position: 'belowBar', shape: 'arrowUp', color: C.primary, text: 'Buy' }
-          : {
-              time: ts(s.time),
-              position: 'aboveBar',
-              shape: 'arrowDown',
-              color: s.kind === 'target' ? C.up : s.kind === 'stop' ? C.down : C.accent,
-              text: s.kind === 'target' ? 'TP' : s.kind === 'stop' ? 'SL' : 'Exit',
-            },
-      )
+    ? out.signals.map((s) => {
+        // Buying (long entry, short cover) points up from below; selling points down from above.
+        const buying = (s.kind === 'entry') === (s.side === 'long')
+        const placement = buying
+          ? ({ position: 'belowBar', shape: 'arrowUp' } as const)
+          : ({ position: 'aboveBar', shape: 'arrowDown' } as const)
+        if (s.kind === 'entry') {
+          return { time: ts(s.time), ...placement, color: C.primary, text: s.side === 'long' ? 'Buy' : 'Short' }
+        }
+        return {
+          time: ts(s.time),
+          ...placement,
+          color: s.kind === 'target' ? C.up : s.kind === 'stop' ? C.down : C.accent,
+          text: s.kind === 'target' ? 'TP' : s.kind === 'stop' ? 'SL' : s.side === 'long' ? 'Exit' : 'Cover',
+        }
+      })
     : []
   refs.markers.setMarkers(markers)
 }

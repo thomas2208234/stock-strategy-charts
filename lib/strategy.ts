@@ -1,7 +1,11 @@
 import { autoLevels, ema, macd, sma, vwap, type Level, type Series } from './indicators'
 import type { Bar } from './types'
 
+export type Side = 'long' | 'short'
+export type Direction = Side | 'both'
+
 export interface StrategyConfig {
+  direction: Direction
   ma: { enabled: boolean; type: 'SMA' | 'EMA'; fast: number; slow: number }
   vwap: { enabled: boolean }
   macd: { enabled: boolean; fast: number; slow: number; signal: number }
@@ -13,6 +17,7 @@ export interface StrategyConfig {
 }
 
 export const DEFAULT_STRATEGY: StrategyConfig = {
+  direction: 'long',
   ma: { enabled: true, type: 'EMA', fast: 9, slow: 21 },
   vwap: { enabled: true },
   macd: { enabled: false, fast: 12, slow: 26, signal: 9 },
@@ -26,7 +31,16 @@ export const DEFAULT_STRATEGY: StrategyConfig = {
 export interface SignalMarker {
   time: number
   kind: 'entry' | 'exit' | 'stop' | 'target'
+  side: Side
   price: number
+}
+
+export interface OpenPosition {
+  side: Side
+  time: number
+  entry: number
+  stop?: number
+  target?: number
 }
 
 export interface StrategyOutput {
@@ -36,7 +50,7 @@ export interface StrategyOutput {
   macd?: { line: Series; signal: Series; hist: Series }
   levels: Level[]
   signals: SignalMarker[]
-  open?: { time: number; entry: number; stop?: number; target?: number }
+  open?: OpenPosition
 }
 
 function crossUp(a: Series, b: Series | number, i: number) {
@@ -94,49 +108,70 @@ export function runStrategy(bars: Bar[], cfg: StrategyConfig, intraday: boolean)
   ].some(Boolean)
   if (!entryTriggers) return out
 
-  let position: { entry: number; time: number; stop?: number; target?: number } | undefined
+  const sides: Side[] = cfg.direction === 'both' ? ['long', 'short'] : [cfg.direction]
+
+  // Long trades use the rules as written; shorts mirror every cross and the VWAP filter.
+  const entryCross = (side: Side, i: number) => {
+    const cross = side === 'long' ? crossUp : crossDown
+    return Boolean(
+      (cfg.entry.maCrossUp && out.maFast && out.maSlow && cross(out.maFast, out.maSlow, i)) ||
+        (cfg.entry.macdCrossUp && out.macd && cross(out.macd.line, out.macd.signal, i)),
+    )
+  }
+  const exitCross = (side: Side, i: number) => {
+    const cross = side === 'long' ? crossDown : crossUp
+    return Boolean(
+      (cfg.exit.maCrossDown && out.maFast && out.maSlow && cross(out.maFast, out.maSlow, i)) ||
+        (cfg.exit.macdCrossDown && out.macd && cross(out.macd.line, out.macd.signal, i)),
+    )
+  }
+
+  const passesVwap = (side: Side, i: number, close: number) => {
+    if (!cfg.entry.requireAboveVwap || !out.vwap) return true
+    const v = out.vwap[i]
+    if (v === undefined) return false
+    return side === 'long' ? close > v : close < v
+  }
+
+  let position: OpenPosition | undefined
 
   for (let i = 1; i < bars.length; i++) {
     const bar = bars[i]
 
     if (position) {
-      if (position.stop !== undefined && bar.low <= position.stop) {
-        out.signals.push({ time: bar.time, kind: 'stop', price: position.stop })
+      const { side } = position
+      const stopHit =
+        position.stop !== undefined && (side === 'long' ? bar.low <= position.stop : bar.high >= position.stop)
+      if (stopHit) {
+        out.signals.push({ time: bar.time, kind: 'stop', side, price: position.stop! })
         position = undefined
         continue
       }
-      if (position.target !== undefined && bar.high >= position.target) {
-        out.signals.push({ time: bar.time, kind: 'target', price: position.target })
+      const targetHit =
+        position.target !== undefined && (side === 'long' ? bar.high >= position.target : bar.low <= position.target)
+      if (targetHit) {
+        out.signals.push({ time: bar.time, kind: 'target', side, price: position.target! })
         position = undefined
         continue
       }
-      const exit =
-        (cfg.exit.maCrossDown && out.maFast && out.maSlow && crossDown(out.maFast, out.maSlow, i)) ||
-        (cfg.exit.macdCrossDown && out.macd && crossDown(out.macd.line, out.macd.signal, i))
-      if (exit) {
-        out.signals.push({ time: bar.time, kind: 'exit', price: bar.close })
-        position = undefined
-      }
-      continue
+      if (!exitCross(side, i)) continue
+      out.signals.push({ time: bar.time, kind: 'exit', side, price: bar.close })
+      position = undefined
+      // Fall through so a rule-based exit can reverse into the opposite side on the same bar.
     }
 
-    const trigger =
-      (cfg.entry.maCrossUp && out.maFast && out.maSlow && crossUp(out.maFast, out.maSlow, i)) ||
-      (cfg.entry.macdCrossUp && out.macd && crossUp(out.macd.line, out.macd.signal, i))
-    if (!trigger) continue
+    const side = sides.find((s) => entryCross(s, i) && passesVwap(s, i, bar.close))
+    if (!side) continue
 
-    if (cfg.entry.requireAboveVwap && out.vwap) {
-      const v = out.vwap[i]
-      if (v === undefined || bar.close <= v) continue
-    }
-
+    const sign = side === 'long' ? 1 : -1
     position = {
+      side,
       entry: bar.close,
       time: bar.time,
-      stop: cfg.risk.useStop ? bar.close * (1 - cfg.risk.stopPct / 100) : undefined,
-      target: cfg.risk.useTarget ? bar.close * (1 + cfg.risk.targetPct / 100) : undefined,
+      stop: cfg.risk.useStop ? bar.close * (1 - (sign * cfg.risk.stopPct) / 100) : undefined,
+      target: cfg.risk.useTarget ? bar.close * (1 + (sign * cfg.risk.targetPct) / 100) : undefined,
     }
-    out.signals.push({ time: bar.time, kind: 'entry', price: bar.close })
+    out.signals.push({ time: bar.time, kind: 'entry', side, price: bar.close })
   }
 
   if (position) out.open = position
