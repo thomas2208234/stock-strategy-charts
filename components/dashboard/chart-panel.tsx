@@ -12,15 +12,16 @@ import {
   Minus,
   MousePointer2,
   RefreshCw,
-  Search,
   Slash,
   Timer,
   Trash2,
   Undo2,
   X,
+  ZoomIn,
+  ZoomOut,
   type LucideIcon,
 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ASSET_LABEL, FUTURES_ETF_PROXY, findCatalog } from '@/lib/catalog'
 import { formatAge, formatPrice, freshness } from '@/lib/freshness'
 import { runStrategy } from '@/lib/strategy'
@@ -32,6 +33,7 @@ import type { Drawing, DrawTool } from './drawing-layer'
 import { PriceChart } from './price-chart'
 import { SymbolPicker } from './symbol-picker'
 import { useNow } from './use-now'
+import type { ZoomHandle } from './zoom-layer'
 
 const ERROR_COPY: Record<ApiErrorKind, { title: string; icon: typeof Ban }> = {
   unsupported: { title: 'Not available from provider', icon: Ban },
@@ -41,8 +43,6 @@ const ERROR_COPY: Record<ApiErrorKind, { title: string; icon: typeof Ban }> = {
   invalid: { title: 'Invalid request', icon: AlertTriangle },
   upstream: { title: 'Provider error', icon: AlertTriangle },
 }
-
-const ZOOM_LEVELS = [2, 3, 4, 6] as const
 
 const INTERVAL_NAME: Record<Interval, string> = {
   '1min': '1 minute',
@@ -73,8 +73,13 @@ export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: s
 
   const [expanded, setExpanded] = useState(false)
   const [tool, setTool] = useState<DrawTool>('none')
-  const [magnify, setMagnify] = useState(false)
-  const [zoom, setZoom] = useState<(typeof ZOOM_LEVELS)[number]>(3)
+  const [zoomMode, setZoomMode] = useState(false)
+  const [zoomDepth, setZoomDepth] = useState(0)
+  const zoomRef = useRef<ZoomHandle | null>(null)
+  const pickTool = (t: DrawTool) => {
+    setTool(t)
+    setZoomMode(false)
+  }
   const [selected, setSelected] = useState<string | null>(null)
   const [drawingsBySymbol, setDrawingsBySymbol] = useState<Record<string, Drawing[]>>({})
   const symbolKey = `${slot.asset}:${slot.symbol}`
@@ -91,10 +96,14 @@ export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: s
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement
       if (target.closest('input, textarea, select, [contenteditable="true"]')) return
-      if ((e.key === 'm' || e.key === 'M') && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        setMagnify((v) => !v)
+      const plain = !e.metaKey && !e.ctrlKey && !e.altKey
+      if ((e.key === 'z' || e.key === 'Z') && plain && !e.shiftKey) {
+        setTool('none')
+        setZoomMode((v) => !v)
+      } else if ((e.key === 'x' || e.key === 'X') && plain) {
+        zoomRef.current?.zoomOut()
       } else if (e.key === 'Escape') {
-        if (magnify) setMagnify(false)
+        if (zoomMode) setZoomMode(false)
         else if (tool !== 'none') setTool('none')
         else if (selected) setSelected(null)
         else if (expanded) setExpanded(false)
@@ -106,7 +115,7 @@ export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: s
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [expanded, isActive, tool, selected, symbolKey, magnify])
+  }, [expanded, isActive, tool, selected, symbolKey, zoomMode])
 
   useEffect(() => {
     if (!expanded) return
@@ -192,35 +201,25 @@ export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: s
         aria-label="Drawing tools"
         className="flex items-center gap-0.5 border-b border-border bg-panel px-2 py-1"
       >
-        <ToolButton icon={MousePointer2} label="Move chart (Esc)" active={tool === 'none'} onClick={() => setTool('none')} />
-        <ToolButton icon={Slash} label="Trend line — drag on the chart" active={tool === 'trend'} onClick={() => setTool('trend')} />
-        <ToolButton icon={Minus} label="Horizontal line — click a price" active={tool === 'hline'} onClick={() => setTool('hline')} />
+        <ToolButton icon={MousePointer2} label="Move chart (Esc)" active={tool === 'none' && !zoomMode} onClick={() => pickTool('none')} />
+        <ToolButton icon={Slash} label="Trend line — drag on the chart" active={tool === 'trend'} onClick={() => pickTool('trend')} />
+        <ToolButton icon={Minus} label="Horizontal line — click a price" active={tool === 'hline'} onClick={() => pickTool('hline')} />
         <span className="mx-1 h-4 w-px bg-border" aria-hidden />
         <ToolButton
-          icon={Search}
-          label={magnify ? 'Turn off magnifier (M)' : 'Magnifier — hover to zoom in on candles (M)'}
-          active={magnify}
-          onClick={() => setMagnify((v) => !v)}
+          icon={ZoomIn}
+          label="Zoom in — drag a box over the area (Z)"
+          active={zoomMode}
+          onClick={() => {
+            setTool('none')
+            setZoomMode((v) => !v)
+          }}
         />
-        {magnify ? (
-          <div role="radiogroup" aria-label="Magnifier zoom" className="flex items-center rounded-md bg-background p-0.5">
-            {ZOOM_LEVELS.map((z) => (
-              <button
-                key={z}
-                type="button"
-                role="radio"
-                aria-checked={zoom === z}
-                onClick={() => setZoom(z)}
-                className={clsx(
-                  'rounded px-1.5 py-0.5 font-mono text-[11px] transition-colors',
-                  zoom === z ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                {z}×
-              </button>
-            ))}
-          </div>
-        ) : null}
+        <ToolButton
+          icon={ZoomOut}
+          label="Zoom out — undo last zoom (X)"
+          disabled={zoomDepth === 0}
+          onClick={() => zoomRef.current?.zoomOut()}
+        />
         <span className="mx-1 h-4 w-px bg-border" aria-hidden />
         <ToolButton
           icon={Undo2}
@@ -241,8 +240,8 @@ export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: s
           }}
         />
         <span className="ml-2 min-w-0 truncate text-[11px] text-muted-foreground">
-          {magnify && tool === 'none'
-            ? 'Hover a candle to magnify it'
+          {zoomMode
+            ? 'Drag a box over the candles to zoom in'
             : tool === 'trend'
             ? 'Drag on the chart to draw a line'
             : tool === 'hline'
@@ -270,7 +269,7 @@ export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: s
       <div
         className="relative min-h-0 flex-1"
         onDoubleClick={() => {
-          if (tool === 'none') setExpanded((v) => !v)
+          if (tool === 'none' && !zoomMode) setExpanded((v) => !v)
         }}
       >
         {bars.length > 0 ? (
@@ -285,7 +284,10 @@ export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: s
             selectedDrawing={selected}
             onAddDrawing={(d) => setDrawings((prev) => [...prev, d])}
             onSelectDrawing={setSelected}
-            magnifyZoom={magnify ? zoom : 0}
+            zoomMode={zoomMode}
+            zoomRef={zoomRef}
+            onZoomed={() => setZoomMode(false)}
+            onZoomDepthChange={setZoomDepth}
           />
         ) : null}
 
