@@ -3,6 +3,7 @@
 import clsx from 'clsx'
 import { CandlestickChart } from 'lucide-react'
 import { useState } from 'react'
+import { AccountButton } from './account-button'
 import { ChartPanel } from './chart-panel'
 import { ConnectionStatus } from './connection-status'
 import { DashboardProvider, useDashboard } from './dashboard-context'
@@ -50,6 +51,7 @@ function Shell() {
             <ConnectionStatus />
           </div>
           <GuideButton />
+          <AccountButton />
         </div>
       </header>
 
