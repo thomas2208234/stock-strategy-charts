@@ -32,11 +32,10 @@ export function AuthForm({ mode }: { mode: Mode }) {
     setLoading(false)
 
     if (error) {
-      setError(
-        isSignUp
-          ? 'Could not create your account. Check your details and try again.'
-          : 'Incorrect email or password.',
-      )
+      const fallback = isSignUp
+        ? 'Could not create your account. Check your details and try again.'
+        : 'Incorrect email or password.'
+      setError(error.status === 401 || !error.message ? fallback : error.message)
       return
     }
 
