@@ -23,14 +23,16 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ASSET_LABEL, FUTURES_ETF_PROXY, findCatalog } from '@/lib/catalog'
-import { formatAge, formatPrice, freshness } from '@/lib/freshness'
+import type { ChartType, ScaleMode } from '@/lib/chart-style'
+import { formatAge, freshness } from '@/lib/freshness'
 import { runStrategy } from '@/lib/strategy'
 import { describeStatus, type SignalStatus } from '@/lib/strategy-text'
 import { INTERVALS, type ApiErrorKind, type Interval } from '@/lib/types'
 import { useMarketData } from '@/lib/use-market-data'
 import { useDashboard, type ChartSlot } from './dashboard-context'
 import type { Drawing, DrawTool } from './drawing-layer'
-import { PriceChart } from './price-chart'
+import { ChartTypeMenu } from './chart-type-menu'
+import { PriceChart, type ChartViewHandle } from './price-chart'
 import { SymbolPicker } from './symbol-picker'
 import { useNow } from './use-now'
 import type { ZoomHandle } from './zoom-layer'
@@ -54,6 +56,19 @@ const INTERVAL_NAME: Record<Interval, string> = {
   '1day': '1 day',
 }
 
+const DAY = 86400
+const RANGES: { label: string; name: string; from: (lastSec: number) => number | null }[] = [
+  { label: '1D', name: '1 day', from: (t) => t - DAY },
+  { label: '5D', name: '5 days', from: (t) => t - 5 * DAY },
+  { label: '1M', name: '1 month', from: (t) => t - 30 * DAY },
+  { label: '3M', name: '3 months', from: (t) => t - 91 * DAY },
+  { label: '6M', name: '6 months', from: (t) => t - 182 * DAY },
+  { label: 'YTD', name: 'Year to date', from: (t) => Date.UTC(new Date(t * 1000).getUTCFullYear(), 0, 1) / 1000 },
+  { label: '1Y', name: '1 year', from: (t) => t - 365 * DAY },
+  { label: '5Y', name: '5 years', from: (t) => t - 1826 * DAY },
+  { label: 'All', name: 'All data', from: () => null },
+]
+
 export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: string }) {
   const { strategy, settings, activeChart, setActiveChart, updateChart, loadInstrument } = useDashboard()
   const { data, error, isLoading, isValidating, mutate } = useMarketData(slot, settings.barCount, settings.refreshSeconds)
@@ -65,9 +80,8 @@ export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: s
   const output = useMemo(() => runStrategy(bars, strategy, intraday), [bars, strategy, intraday])
   const status = bars.length > 0 ? describeStatus(bars, output, strategy) : undefined
 
+  const first = bars[0]
   const last = bars[bars.length - 1]
-  const prev = bars[bars.length - 2]
-  const change = last && prev ? ((last.close - prev.close) / prev.close) * 100 : undefined
   const fresh = last ? freshness(last.time, slot.interval, now) : undefined
   const proxy = slot.asset === 'future' ? FUTURES_ETF_PROXY[slot.symbol] : undefined
 
@@ -76,6 +90,10 @@ export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: s
   const [zoomMode, setZoomMode] = useState(false)
   const [zoomDepth, setZoomDepth] = useState(0)
   const zoomRef = useRef<ZoomHandle | null>(null)
+  const viewRef = useRef<ChartViewHandle | null>(null)
+  const [chartType, setChartType] = useState<ChartType>('candles')
+  const [scaleMode, setScaleMode] = useState<ScaleMode>('normal')
+  const [autoScale, setAutoScale] = useState(true)
   const pickTool = (t: DrawTool) => {
     setTool(t)
     setZoomMode(false)
@@ -152,20 +170,8 @@ export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: s
             {ASSET_LABEL[slot.asset]}
           </span>
         </div>
-        {last ? (
-          <span className="flex items-baseline gap-2 font-mono">
-            <span className="text-sm font-semibold text-foreground">{formatPrice(last.close)}</span>
-            {change !== undefined ? (
-              <span
-                className={clsx('rounded px-1 text-xs', change >= 0 ? 'bg-up/15 text-up' : 'bg-down/15 text-down')}
-                title="Change since the previous bar"
-              >
-                {change >= 0 ? '+' : ''}
-                {change.toFixed(2)}%
-              </span>
-            ) : null}
-          </span>
-        ) : null}
+        <span className="h-5 w-px bg-border" aria-hidden />
+        <ChartTypeMenu value={chartType} onChange={setChartType} />
         <div
           role="radiogroup"
           aria-label="Timeframe (time per candle)"
@@ -196,15 +202,19 @@ export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: s
         />
       </header>
 
+      {status ? <StatusBar status={status} /> : null}
+
+      <div className="flex min-h-0 flex-1">
       <div
         role="toolbar"
         aria-label="Drawing tools"
-        className="flex items-center gap-0.5 border-b border-border bg-panel px-2 py-1"
+        aria-orientation="vertical"
+        className="flex w-10 shrink-0 flex-col items-center gap-1 border-r border-border bg-panel py-2"
       >
         <ToolButton icon={MousePointer2} label="Move chart (Esc)" active={tool === 'none' && !zoomMode} onClick={() => pickTool('none')} />
         <ToolButton icon={Slash} label="Trend line — drag on the chart" active={tool === 'trend'} onClick={() => pickTool('trend')} />
         <ToolButton icon={Minus} label="Horizontal line — click a price" active={tool === 'hline'} onClick={() => pickTool('hline')} />
-        <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+        <span className="my-1 h-px w-5 bg-border" aria-hidden />
         <ToolButton
           icon={ZoomIn}
           label="Zoom in — drag a box over the area (Z)"
@@ -220,7 +230,7 @@ export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: s
           disabled={zoomDepth === 0}
           onClick={() => zoomRef.current?.zoomOut()}
         />
-        <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+        <span className="my-1 h-px w-5 bg-border" aria-hidden />
         <ToolButton
           icon={Undo2}
           label="Undo last line"
@@ -239,44 +249,52 @@ export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: s
             setSelected(null)
           }}
         />
-        <span className="ml-2 min-w-0 truncate text-[11px] text-muted-foreground">
-          {zoomMode
-            ? 'Drag a box over the candles to zoom in'
-            : tool === 'trend'
-            ? 'Drag on the chart to draw a line'
-            : tool === 'hline'
-              ? 'Click a price to place a line'
-              : selected
-                ? 'Line selected'
-                : drawings.length > 0
-                  ? 'Click a line to select it'
-                  : 'Pick a tool to draw on the chart'}
-        </span>
-        {selected ? (
-          <button
-            type="button"
-            onClick={() => removeDrawing(selected)}
-            className="ml-auto flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-down hover:bg-down/15"
-          >
-            <X className="size-3.5" aria-hidden />
-            Delete line
-          </button>
-        ) : null}
       </div>
 
-      {status ? <StatusBar status={status} /> : null}
-
       <div
-        className="relative min-h-0 flex-1"
+        className="relative min-h-0 min-w-0 flex-1"
         onDoubleClick={() => {
           if (tool === 'none' && !zoomMode) setExpanded((v) => !v)
         }}
       >
+        {zoomMode || tool !== 'none' || selected ? (
+          <div
+            role="status"
+            className="absolute left-1/2 top-2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-md border border-border bg-panel px-2.5 py-1 text-xs text-foreground shadow-lg"
+          >
+            <span>
+              {zoomMode
+                ? 'Drag a box over the candles to zoom in'
+                : tool === 'trend'
+                  ? 'Drag on the chart to draw a line'
+                  : tool === 'hline'
+                    ? 'Click a price to place a line'
+                    : 'Line selected'}
+            </span>
+            {selected ? (
+              <button
+                type="button"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={() => removeDrawing(selected)}
+                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-down hover:bg-down/15"
+              >
+                <X className="size-3.5" aria-hidden />
+                Delete
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
         {bars.length > 0 ? (
           <PriceChart
             bars={bars}
             output={output}
             interval={slot.interval}
+            title={{ symbol: slot.symbol, exchange: ASSET_LABEL[slot.asset] }}
+            chartType={chartType}
+            scaleMode={scaleMode}
+            viewRef={viewRef}
+            onAutoScaleChange={setAutoScale}
             strategy={strategy}
             settings={settings}
             drawings={drawings}
@@ -308,24 +326,45 @@ export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: s
           />
         ) : null}
       </div>
+      </div>
 
-      <footer className="flex items-center gap-2 border-t border-border bg-panel px-3 py-1.5 text-[11px] text-muted-foreground">
-        {fresh ? (
-          <span
-            className="flex items-center gap-1.5"
-            title="Based on the age of the newest candle. Latency depends on your Twelve Data plan and exchange licensing."
-          >
-            <span className={clsx('size-1.5 rounded-full', fresh.state === 'recent' ? 'bg-up' : 'bg-warning')} aria-hidden />
-            {fresh.state === 'recent' ? 'Up to date' : 'Delayed or market closed'}
-            <span>· updated {formatAge(fresh.ageSec)} ago</span>
-          </span>
-        ) : (
-          <span>No data</span>
-        )}
-        {error && bars.length > 0 ? <span className="truncate text-warning">Refresh failed: {error.message}</span> : null}
-        <span className="ml-auto hidden sm:inline">
-          {data ? `Each candle = ${INTERVAL_NAME[slot.interval]}` : ''}
-        </span>
+      <footer className="flex items-center gap-1 border-t border-border bg-panel px-2 py-1 font-chart text-xs text-muted-foreground">
+        <div role="group" aria-label="Date range" className="flex min-w-0 items-center gap-0.5 overflow-x-auto">
+          {RANGES.map((r) => {
+            const from = last ? r.from(last.time) : null
+            const available = r.label === 'All' || (first !== undefined && from !== null && from >= first.time)
+            return (
+              <button
+                key={r.label}
+                type="button"
+                disabled={!last || !available}
+                aria-label={`Show ${r.name}`}
+                title={available ? r.name : `${r.name} — not enough data loaded`}
+                onClick={() => viewRef.current?.showFrom(from)}
+                className="shrink-0 rounded px-1.5 py-0.5 transition-colors hover:bg-border hover:text-foreground disabled:pointer-events-none disabled:opacity-35"
+              >
+                {r.label}
+              </button>
+            )
+          })}
+        </div>
+        {error && bars.length > 0 ? <span className="ml-2 truncate text-warning">Refresh failed: {error.message}</span> : null}
+        <div className="ml-auto flex shrink-0 items-center gap-0.5">
+          {fresh ? (
+            <span
+              className="mr-1 hidden items-center gap-1.5 md:flex"
+              title={`Updated ${formatAge(fresh.ageSec)} ago. Latency depends on your Twelve Data plan and exchange licensing.`}
+            >
+              <span className={clsx('size-1.5 rounded-full', fresh.state === 'recent' ? 'bg-up' : 'bg-warning')} aria-hidden />
+              {fresh.state === 'recent' ? 'Live' : 'Delayed'}
+            </span>
+          ) : null}
+          <ChartClock local={settings.localTime} />
+          <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+          <ScaleToggle label="%" name="Percentage scale" active={scaleMode === 'percent'} onClick={() => setScaleMode((m) => (m === 'percent' ? 'normal' : 'percent'))} />
+          <ScaleToggle label="log" name="Logarithmic scale" active={scaleMode === 'log'} onClick={() => setScaleMode((m) => (m === 'log' ? 'normal' : 'log'))} />
+          <ScaleToggle label="auto" name="Auto-fit price scale" active={autoScale} onClick={() => viewRef.current?.resetScale()} />
+          <span className="mx-1 h-4 w-px bg-border" aria-hidden />
         <button
           type="button"
           onClick={() => mutate()}
@@ -335,9 +374,44 @@ export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: s
         >
           <RefreshCw className={clsx('size-3.5', isValidating && 'animate-spin')} aria-hidden />
         </button>
+        </div>
       </footer>
     </section>
     </>
+  )
+}
+
+function ChartClock({ local }: { local: boolean }) {
+  const now = new Date(useNow(1000))
+  const time = now.toLocaleTimeString('en-GB', { hour12: false, timeZone: local ? undefined : 'UTC' })
+  const offsetMin = -now.getTimezoneOffset()
+  const sign = offsetMin >= 0 ? '+' : '-'
+  const abs = Math.abs(offsetMin)
+  const zone = local
+    ? `UTC${sign}${Math.floor(abs / 60)}${abs % 60 ? `:${String(abs % 60).padStart(2, '0')}` : ''}`
+    : 'UTC'
+  return (
+    <span className="px-1 tabular-nums" title={local ? 'Local time' : 'Coordinated Universal Time'}>
+      {time} ({zone})
+    </span>
+  )
+}
+
+function ScaleToggle({ label, name, active, onClick }: { label: string; name: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      aria-label={name}
+      title={name}
+      onClick={onClick}
+      className={clsx(
+        'rounded px-1.5 py-0.5 transition-colors hover:bg-border',
+        active ? 'text-primary' : 'hover:text-foreground',
+      )}
+    >
+      {label}
+    </button>
   )
 }
 

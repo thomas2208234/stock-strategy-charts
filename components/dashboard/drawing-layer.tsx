@@ -1,6 +1,6 @@
 'use client'
 
-import type { IChartApi, ISeriesApi, Logical } from 'lightweight-charts'
+import type { IChartApi, ISeriesApi, Logical, SeriesType } from 'lightweight-charts'
 import { useEffect, useReducer, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { formatPrice } from '@/lib/freshness'
 import { CHART_COLORS as C } from '@/lib/theme'
@@ -19,7 +19,7 @@ export type DrawTool = 'none' | 'trend' | 'hline'
 
 export interface ChartApi {
   chart: IChartApi
-  candles: ISeriesApi<'Candlestick'>
+  candles: ISeriesApi<SeriesType>
 }
 
 /** Converts a timestamp to a fractional bar index so drawings can extend past the last candle. */
