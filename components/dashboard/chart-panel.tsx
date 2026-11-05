@@ -30,7 +30,7 @@ import { INTERVALS, type ApiErrorKind, type Interval } from '@/lib/types'
 import { useMarketData } from '@/lib/use-market-data'
 import { useDashboard, type ChartSlot } from './dashboard-context'
 import type { Drawing, DrawTool } from './drawing-layer'
-import { PriceChart } from './price-chart'
+import { PriceChart, type ScaleHandle, type ScaleMode } from './price-chart'
 import { SymbolPicker } from './symbol-picker'
 import { useNow } from './use-now'
 import type { ZoomHandle } from './zoom-layer'
@@ -76,6 +76,16 @@ export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: s
   const [zoomMode, setZoomMode] = useState(false)
   const [zoomDepth, setZoomDepth] = useState(0)
   const zoomRef = useRef<ZoomHandle | null>(null)
+  const [scaleMode, setScaleMode] = useState<ScaleMode>('normal')
+  const [autoScale, setAutoScale] = useState(true)
+  const scaleRef = useRef<ScaleHandle | null>(null)
+  const hint = zoomMode
+    ? 'Drag a box over the candles to zoom in'
+    : tool === 'trend'
+      ? 'Drag on the chart to draw a line'
+      : tool === 'hline'
+        ? 'Click a price to place a line'
+        : undefined
   const pickTool = (t: DrawTool) => {
     setTool(t)
     setZoomMode(false)
@@ -196,15 +206,19 @@ export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: s
         />
       </header>
 
+      {status ? <StatusBar status={status} /> : null}
+
+      <div className="flex min-h-0 flex-1">
       <div
         role="toolbar"
         aria-label="Drawing tools"
-        className="flex items-center gap-0.5 border-b border-border bg-panel px-2 py-1"
+        aria-orientation="vertical"
+        className="flex w-10 shrink-0 flex-col items-center gap-0.5 border-r border-border bg-panel py-1.5"
       >
         <ToolButton icon={MousePointer2} label="Move chart (Esc)" active={tool === 'none' && !zoomMode} onClick={() => pickTool('none')} />
         <ToolButton icon={Slash} label="Trend line — drag on the chart" active={tool === 'trend'} onClick={() => pickTool('trend')} />
         <ToolButton icon={Minus} label="Horizontal line — click a price" active={tool === 'hline'} onClick={() => pickTool('hline')} />
-        <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+        <span className="my-1 h-px w-5 bg-border" aria-hidden />
         <ToolButton
           icon={ZoomIn}
           label="Zoom in — drag a box over the area (Z)"
@@ -220,7 +234,7 @@ export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: s
           disabled={zoomDepth === 0}
           onClick={() => zoomRef.current?.zoomOut()}
         />
-        <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+        <span className="my-1 h-px w-5 bg-border" aria-hidden />
         <ToolButton
           icon={Undo2}
           label="Undo last line"
@@ -239,35 +253,10 @@ export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: s
             setSelected(null)
           }}
         />
-        <span className="ml-2 min-w-0 truncate text-[11px] text-muted-foreground">
-          {zoomMode
-            ? 'Drag a box over the candles to zoom in'
-            : tool === 'trend'
-            ? 'Drag on the chart to draw a line'
-            : tool === 'hline'
-              ? 'Click a price to place a line'
-              : selected
-                ? 'Line selected'
-                : drawings.length > 0
-                  ? 'Click a line to select it'
-                  : 'Pick a tool to draw on the chart'}
-        </span>
-        {selected ? (
-          <button
-            type="button"
-            onClick={() => removeDrawing(selected)}
-            className="ml-auto flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-down hover:bg-down/15"
-          >
-            <X className="size-3.5" aria-hidden />
-            Delete line
-          </button>
-        ) : null}
       </div>
 
-      {status ? <StatusBar status={status} /> : null}
-
       <div
-        className="relative min-h-0 flex-1"
+        className="relative min-h-0 min-w-0 flex-1"
         onDoubleClick={() => {
           if (tool === 'none' && !zoomMode) setExpanded((v) => !v)
         }}
@@ -288,7 +277,32 @@ export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: s
             zoomRef={zoomRef}
             onZoomed={() => setZoomMode(false)}
             onZoomDepthChange={setZoomDepth}
+            symbol={slot.symbol}
+            exchange={slot.exchange}
+            scaleMode={scaleMode}
+            scaleRef={scaleRef}
+            onAutoScaleChange={setAutoScale}
           />
+        ) : null}
+
+        {hint || selected ? (
+          <div
+            role="status"
+            className="absolute bottom-10 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-md border border-border bg-panel px-2.5 py-1 text-[11px] text-muted-foreground shadow-lg"
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <span className="whitespace-nowrap">{hint ?? 'Line selected'}</span>
+            {selected ? (
+              <button
+                type="button"
+                onClick={() => removeDrawing(selected)}
+                className="flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-down hover:bg-down/15"
+              >
+                <X className="size-3.5" aria-hidden />
+                Delete
+              </button>
+            ) : null}
+          </div>
         ) : null}
 
         {isLoading && bars.length === 0 ? (
@@ -308,6 +322,7 @@ export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: s
           />
         ) : null}
       </div>
+      </div>
 
       <footer className="flex items-center gap-2 border-t border-border bg-panel px-3 py-1.5 text-[11px] text-muted-foreground">
         {fresh ? (
@@ -323,9 +338,29 @@ export function ChartPanel({ slot, className }: { slot: ChartSlot; className?: s
           <span>No data</span>
         )}
         {error && bars.length > 0 ? <span className="truncate text-warning">Refresh failed: {error.message}</span> : null}
-        <span className="ml-auto hidden sm:inline">
+        <span className="ml-auto hidden xl:inline">
           {data ? `Each candle = ${INTERVAL_NAME[slot.interval]}` : ''}
         </span>
+        <div className="ml-auto flex items-center gap-0.5 xl:ml-2" role="group" aria-label="Price scale">
+          <ScaleToggle
+            label="%"
+            title="Percent scale"
+            active={scaleMode === 'percent'}
+            onClick={() => setScaleMode((m) => (m === 'percent' ? 'normal' : 'percent'))}
+          />
+          <ScaleToggle
+            label="log"
+            title="Logarithmic scale"
+            active={scaleMode === 'log'}
+            onClick={() => setScaleMode((m) => (m === 'log' ? 'normal' : 'log'))}
+          />
+          <ScaleToggle
+            label="auto"
+            title="Auto-fit prices to the visible candles"
+            active={autoScale}
+            onClick={() => scaleRef.current?.resetAutoScale()}
+          />
+        </div>
         <button
           type="button"
           onClick={() => mutate()}
@@ -368,6 +403,23 @@ function ToolButton({
       )}
     >
       <Icon className="size-4" aria-hidden />
+    </button>
+  )
+}
+
+function ScaleToggle({ label, title, active, onClick }: { label: string; title: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      title={title}
+      onClick={onClick}
+      className={clsx(
+        'rounded px-1.5 py-0.5 text-[11px] transition-colors',
+        active ? 'text-primary' : 'text-muted-foreground hover:bg-border hover:text-foreground',
+      )}
+    >
+      {label}
     </button>
   )
 }

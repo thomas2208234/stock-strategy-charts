@@ -7,6 +7,7 @@ import {
   HistogramSeries,
   LineSeries,
   LineStyle,
+  PriceScaleMode,
   TickMarkType,
   createChart,
   createSeriesMarkers,
@@ -23,7 +24,8 @@ import type { Series } from '@/lib/indicators'
 import { formatPrice } from '@/lib/freshness'
 import type { StrategyConfig, StrategyOutput } from '@/lib/strategy'
 import { CHART_COLORS as C } from '@/lib/theme'
-import type { Bar, Interval } from '@/lib/types'
+import { intervalSeconds, type Bar, type Interval } from '@/lib/types'
+import { BarCountdown, ScrollToLatest } from './chart-overlays'
 import type { ChartSettings } from './dashboard-context'
 import { DrawingLayer, type ChartApi, type Drawing, type DrawTool } from './drawing-layer'
 import { ZoomLayer, type ZoomHandle } from './zoom-layer'
@@ -41,6 +43,30 @@ interface Refs {
 }
 
 const ts = (t: number) => t as UTCTimestamp
+
+export type ScaleMode = 'normal' | 'log' | 'percent'
+
+export interface ScaleHandle {
+  resetAutoScale: () => void
+}
+
+const SCALE_MODE: Record<ScaleMode, PriceScaleMode> = {
+  normal: PriceScaleMode.Normal,
+  log: PriceScaleMode.Logarithmic,
+  percent: PriceScaleMode.Percentage,
+}
+
+const LEGEND_INTERVAL: Record<Interval, string> = {
+  '1min': '1',
+  '5min': '5',
+  '15min': '15',
+  '30min': '30',
+  '1h': '1h',
+  '4h': '4h',
+  '1day': '1D',
+}
+
+const compact = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 2 })
 
 function line(bars: Bar[], values: Series | undefined) {
   if (!values) return []
@@ -73,7 +99,7 @@ function applyData(refs: Refs, bars: Bar[], out: StrategyOutput, cfg: StrategyCo
   refs.volume?.setData(
     bars
       .filter((b) => b.volume !== undefined)
-      .map((b) => ({ time: ts(b.time), value: b.volume ?? 0, color: b.close >= b.open ? `${C.up}55` : `${C.down}55` })),
+      .map((b) => ({ time: ts(b.time), value: b.volume ?? 0, color: b.close >= b.open ? `${C.up}80` : `${C.down}80` })),
   )
   refs.vwap?.setData(line(bars, out.vwap))
   refs.macdLine?.setData(line(bars, out.macd?.line))
@@ -150,7 +176,17 @@ export function PriceChart({
   zoomRef,
   onZoomed,
   onZoomDepthChange,
+  symbol,
+  exchange,
+  scaleMode = 'normal',
+  scaleRef,
+  onAutoScaleChange,
 }: {
+  symbol: string
+  exchange?: string
+  scaleMode?: ScaleMode
+  scaleRef?: RefObject<ScaleHandle | null>
+  onAutoScaleChange?: (auto: boolean) => void
   zoomMode?: boolean
   zoomRef?: RefObject<ZoomHandle | null>
   onZoomed: () => void
@@ -192,21 +228,33 @@ export function PriceChart({
       layout: {
         background: { type: ColorType.Solid, color: C.background },
         textColor: C.text,
-        fontFamily: 'var(--font-geist-sans), system-ui, sans-serif',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif',
         fontSize: 11,
         attributionLogo: false,
-        panes: { separatorColor: C.border, separatorHoverColor: C.border, enableResize: true },
+        panes: { separatorColor: C.border, separatorHoverColor: 'rgba(41, 98, 255, 0.4)', enableResize: true },
       },
       grid: {
         vertLines: { color: C.grid, visible: settings.showGrid },
         horzLines: { color: C.grid, visible: settings.showGrid },
       },
-      crosshair: { mode: settings.magnetCrosshair ? CrosshairMode.Magnet : CrosshairMode.Normal },
-      rightPriceScale: { borderColor: C.border },
+      crosshair: {
+        mode: settings.magnetCrosshair ? CrosshairMode.Magnet : CrosshairMode.Normal,
+        vertLine: { color: C.crosshair, width: 1, style: LineStyle.LargeDashed, labelBackgroundColor: C.crosshairLabel },
+        horzLine: { color: C.crosshair, width: 1, style: LineStyle.LargeDashed, labelBackgroundColor: C.crosshairLabel },
+      },
+      rightPriceScale: {
+        borderColor: C.border,
+        mode: SCALE_MODE[scaleMode],
+        scaleMargins: settings.showVolume ? { top: 0.1, bottom: 0.22 } : { top: 0.1, bottom: 0.08 },
+      },
+      kineticScroll: { mouse: true, touch: true },
       timeScale: {
         borderColor: C.border,
         timeVisible: intraday,
         secondsVisible: false,
+        rightOffset: 10,
+        barSpacing: 7,
+        minBarSpacing: 0.5,
         tickMarkFormatter: settings.localTime ? localTickFormatter : undefined,
       },
       localization: settings.localTime
@@ -225,14 +273,17 @@ export function PriceChart({
       downColor: C.down,
       wickUpColor: C.up,
       wickDownColor: C.down,
-      borderVisible: false,
+      borderUpColor: C.up,
+      borderDownColor: C.down,
+      borderVisible: true,
+      priceLineStyle: LineStyle.Dotted,
     })
 
     const r: Refs = { chart, candles, markers: createSeriesMarkers(candles, []), priceLines: [] }
 
     if (settings.showVolume) {
       r.volume = chart.addSeries(HistogramSeries, { priceFormat: { type: 'volume' }, priceScaleId: 'vol', lastValueVisible: false, priceLineVisible: false })
-      r.volume.priceScale().applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } })
+      r.volume.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } })
     }
     const overlay = { lineWidth: 1 as const, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }
     if (strategy.vwap.enabled && intraday) {
@@ -276,16 +327,47 @@ export function PriceChart({
     if (refs.current) applyData(refs.current, bars, output, strategy)
   }, [bars, output, strategy])
 
+  useEffect(() => {
+    api?.chart.priceScale('right').applyOptions({ mode: SCALE_MODE[scaleMode] })
+  }, [api, scaleMode])
+
+  useEffect(() => {
+    if (!scaleRef) return
+    scaleRef.current = {
+      resetAutoScale: () => {
+        api?.chart.priceScale('right').applyOptions({ autoScale: true })
+        onAutoScaleChange?.(true)
+      },
+    }
+    return () => {
+      scaleRef.current = null
+    }
+  }, [api, scaleRef, onAutoScaleChange])
+
+  const syncAutoScale = () => {
+    if (!api || !onAutoScaleChange) return
+    requestAnimationFrame(() => onAutoScaleChange(api.chart.priceScale('right').options().autoScale))
+  }
+
   const shown = hover ?? bars[bars.length - 1]
   const lastIdx = hover ? bars.indexOf(hover) : bars.length - 1
+  const prevBar = lastIdx > 0 ? bars[lastIdx - 1] : undefined
   const legendValue = (s?: Series) => (s && s[lastIdx] !== undefined ? formatPrice(s[lastIdx] as number) : '—')
+  const barUp = shown ? shown.close >= shown.open : true
+  const tone = barUp ? 'text-up' : 'text-down'
+  const delta = shown && prevBar ? shown.close - prevBar.close : undefined
+  const deltaPct = delta !== undefined && prevBar ? (delta / prevBar.close) * 100 : undefined
 
   return (
     <div
       className="relative h-full w-full"
       onPointerDown={() => onSelectDrawing(null)}
+      onPointerUp={syncAutoScale}
+      onWheel={syncAutoScale}
     >
       <div ref={containerRef} className="absolute inset-0" />
+      <BarCountdown api={api} last={bars[bars.length - 1]} intervalSec={intervalSeconds(interval)} />
+      <ScrollToLatest api={api} barCount={bars.length} />
       <ZoomLayer api={api} active={zoomMode} handleRef={zoomRef} onZoomed={onZoomed} onDepthChange={onZoomDepthChange} />
       <DrawingLayer
         api={api}
@@ -297,22 +379,40 @@ export function PriceChart({
         onSelect={onSelectDrawing}
       />
       {shown ? (
-        <div className="pointer-events-none absolute left-2 top-1.5 z-10 flex flex-col gap-0.5 font-mono text-[11px] leading-snug">
-          <div className="flex flex-wrap gap-x-2 text-muted-foreground">
-            <span>
-              O <span className={shown.close >= shown.open ? 'text-up' : 'text-down'}>{formatPrice(shown.open)}</span>
+        <div className="pointer-events-none absolute left-2 top-1.5 z-10 flex flex-col gap-1 text-[13px] leading-snug tabular-nums">
+          <div className="flex flex-wrap items-baseline gap-x-2">
+            <span className="font-medium text-foreground">
+              {symbol} · {LEGEND_INTERVAL[interval]}
+              {exchange ? ` · ${exchange}` : ''}
             </span>
-            <span>
-              H <span className={shown.close >= shown.open ? 'text-up' : 'text-down'}>{formatPrice(shown.high)}</span>
-            </span>
-            <span>
-              L <span className={shown.close >= shown.open ? 'text-up' : 'text-down'}>{formatPrice(shown.low)}</span>
-            </span>
-            <span>
-              C <span className={shown.close >= shown.open ? 'text-up' : 'text-down'}>{formatPrice(shown.close)}</span>
+            <span className="flex flex-wrap gap-x-2 text-xs text-muted-foreground">
+              <span>
+                O<span className={`ml-0.5 ${tone}`}>{formatPrice(shown.open)}</span>
+              </span>
+              <span>
+                H<span className={`ml-0.5 ${tone}`}>{formatPrice(shown.high)}</span>
+              </span>
+              <span>
+                L<span className={`ml-0.5 ${tone}`}>{formatPrice(shown.low)}</span>
+              </span>
+              <span>
+                C<span className={`ml-0.5 ${tone}`}>{formatPrice(shown.close)}</span>
+              </span>
+              {delta !== undefined && deltaPct !== undefined ? (
+                <span className={delta >= 0 ? 'text-up' : 'text-down'}>
+                  {delta >= 0 ? '+' : ''}
+                  {formatPrice(delta)} ({delta >= 0 ? '+' : ''}
+                  {deltaPct.toFixed(2)}%)
+                </span>
+              ) : null}
             </span>
           </div>
-          <div className="flex flex-wrap gap-x-3">
+          {settings.showVolume && shown.volume !== undefined ? (
+            <div className="text-xs text-muted-foreground">
+              Vol<span className={`ml-1 ${tone}`}>{compact.format(shown.volume)}</span>
+            </div>
+          ) : null}
+          <div className="flex flex-wrap gap-x-3 text-xs">
             {output.vwap ? (
               <span className="flex items-center gap-1 text-foreground">
                 <span className="w-2.5 border-t-2 border-dashed border-foreground" aria-hidden />
