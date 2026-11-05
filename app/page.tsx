@@ -1,5 +1,5 @@
-import { Dashboard } from '@/components/dashboard/dashboard'
+import { WelcomeScreen } from '@/components/welcome/welcome-screen'
 
 export default function Page() {
-  return <Dashboard />
+  return <WelcomeScreen />
 }
